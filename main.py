@@ -13,8 +13,13 @@ if __name__ == "__main__":
         default=2000,
         help="How often, in milliseconds, to ping the target"
     )
+    parser.add_argument(
+        "--stdout",
+        default=False,
+        action="store_true",
+        help="Disables output to stdout"
+    )
     args = parser.parse_args()
 
 
-    uptime.LOGGER.log(100, f"Beginning to monitor {args.target} every {args.period}ms")
-    uptime.start_monitor(args.target, args.period)
+    uptime.start_monitor(args.target, args.period, use_stdout=args.stdout)

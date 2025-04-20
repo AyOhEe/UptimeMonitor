@@ -11,18 +11,12 @@ LOGGER = logging.getLogger("uptime")
 LOGGER.setLevel(logging.INFO)
 
 formatter = logging.Formatter("[%(asctime)s]\t[%(levelname)s]:\t %(message)s", datefmt="%H:%M:%S")
-
-stdout_handler = logging.StreamHandler(sys.stdout)
-stdout_handler.setFormatter(formatter)
-
-
 TODAY = time.strftime('%Y-%m-%d')
 if not os.path.isdir("logs"):
     os.mkdir("logs", 777)
 file_handler = logging.FileHandler(f"logs/{TODAY}-uptime.log")
 file_handler.setFormatter(formatter)
 
-LOGGER.addHandler(stdout_handler)
 LOGGER.addHandler(file_handler)
 
 
@@ -30,7 +24,13 @@ def is_accessible(target):
     command = ["ping", "-n", "1"] if platform.platform().startswith("Windows") else ["ping", "-c", "1"]
     return subprocess.call(command + [target], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT) == 0
 
-def start_monitor(target, delay):
+def start_monitor(target, delay, use_stdout=False):
+    if use_stdout:
+        stdout_handler = logging.StreamHandler(sys.stdout)
+        stdout_handler.setFormatter(formatter)
+        LOGGER.addHandler(stdout_handler)
+
+    LOGGER.log(100, f"Beginning to monitor {target} every {delay}ms")
     while True:
         start_time = time.time_ns()
         if is_accessible(target):
@@ -54,8 +54,13 @@ if __name__ == "__main__":
         default=2000,
         help="How often, in milliseconds, to ping the target"
     )
+    parser.add_argument(
+        "--stdout",
+        default=False,
+        action="store_true",
+        help="Disables output to stdout"
+    )
     args = parser.parse_args()
 
 
-    LOGGER.log(100, f"Beginning to monitor {args.target} every {args.period}ms")
-    start_monitor(args.target, args.period)
+    start_monitor(args.target, args.period, use_stdout=parser.stdout)
