@@ -6,11 +6,14 @@ import time
 import logging
 import argparse
 
+
 logging.addLevelName(100, "START")
 LOGGER = logging.getLogger("uptime")
 LOGGER.setLevel(logging.INFO)
 
-formatter = logging.Formatter("[%(asctime)s]\t[%(levelname)s]:\t %(message)s", datefmt="%H:%M:%S")
+formatter = logging.Formatter("[%(asctime)s]\t[%(levelname)s]:\t %(message)s")
+formatter.formatTime = lambda record, datefmt=None: str(int(time.time()))
+
 TODAY = time.strftime('%Y-%m-%d')
 if not os.path.isdir("logs"):
     os.mkdir("logs", 777)
@@ -24,7 +27,7 @@ def is_accessible(target):
     command = ["ping", "-n", "1"] if platform.platform().startswith("Windows") else ["ping", "-c", "1"]
     return subprocess.call(command + [target], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT) == 0
 
-def start_monitor(target, delay, use_stdout=False):
+def start_monitor(target: str, delay: float, use_stdout: bool = False):
     if use_stdout:
         stdout_handler = logging.StreamHandler(sys.stdout)
         stdout_handler.setFormatter(formatter)
