@@ -64,4 +64,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
 
-    start_monitor(args.target, args.period, use_stdout=parser.stdout)
+    start_monitor(args.target, args.period, use_stdout=args.stdout)
