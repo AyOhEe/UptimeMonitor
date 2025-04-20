@@ -11,6 +11,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--period",
         default=2000,
+        type=int,
         help="How often, in milliseconds, to ping the target"
     )
     parser.add_argument(
