@@ -81,7 +81,7 @@ def perform_daily_tasks() -> None:
 
 
 def is_first_of_month() -> bool:
-    pass
+    return time.localtime(time.time()).tm_mday == 1
 
 def generate_month_disruption_report() -> None:
     pass
