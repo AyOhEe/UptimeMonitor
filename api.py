@@ -6,7 +6,7 @@ import json
 import uptime as ut
 
 from enum import Enum
-from typing import List
+from typing import List, Callable
 from fastapi import FastAPI, Query, Response
 from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel, Field
@@ -41,10 +41,36 @@ def script_js():
 #shows past 24hrs of uptime on a graph
 @app.get("/uptime_graph.svg", response_class=FileResponse)
 def uptime_graph() -> Response:
-    bar_chart = pygal.Bar()
-    bar_chart.add('Fibonacci', [0, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55])
+    graph = pygal.XY(
+        x_label_rotation=30,
+        x_value_formatter=lambda x: f"{x}hrs",
+        y_value_formatter=lambda y: f"{y*100.0:2.1}%",
+        show_dots=False,
+        width=1500,
+        legend_at_bottom=True,
+        legend_at_bottom_columns=3
+    )
+    graph.x_labels = [0, -6, -12, -18, -24]
+    graph.y_labels = [0.00, 20.0, 50.0, 70.0, 100.0]
 
-    return Response(bar_chart.render(), 200, {"Content-Type" : "image/svg+xml"})
+    graph.add("Uptime", [
+        (-24, 100.0),
+        (-17, 90.0),
+        (-15, 85.0),
+        (-5, 82.5),
+        (0, 81.25)
+    ])
+    graph.add("Disruption end threshold", [
+        (-24, 70.0),
+        (0, 70.0)
+    ])
+    graph.add("Disruption start threshold", [
+        (-24, 20.0),
+        (0, 20.0)
+    ])
+
+
+    return Response(graph.render(), 200, {"Content-Type" : "image/svg+xml"})
 
 
 class ConnectionResult(Enum):
