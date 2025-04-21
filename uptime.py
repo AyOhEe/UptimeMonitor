@@ -33,16 +33,18 @@ def calculate_uptime(log: List[str]) -> float:
 
     period = 2000
 
-    for line in log:
+    for i in range(len(log)):
+        line = log[i].strip()
+        line = line.strip()
         if line.endswith("ms"):
             period = int(line.split(" ")[-1][:-2])
             continue
 
-        if line.endswith("success"):
+        elif line.endswith("success"):
             accounted_uptime += period
             continue
 
-        if line.endswith("FAILED"):
+        elif line.endswith("FAILED"):
             accounted_downtime += period
             continue
 
@@ -79,10 +81,10 @@ def calculate_disruptions(log: List[str]) -> List[Dict[str, int]]:
                 success_t += delta_t
 
         uptime = (success_t / total_t)
-        if not in_disruption and total_t > 50 and uptime < 0.20:
+        if not in_disruption and total_t > 50 and uptime < 0.80:
             disruptions.append({ "start" : rolling_window[0][0], "end" : -1})
             in_disruption = True
-        elif in_disruption and total_t > 50 and uptime > 0.70:
+        elif in_disruption and total_t > 50 and uptime > 0.90:
             disruptions[-1]["end"] = rolling_window[-1][0]
             in_disruption = False
 
