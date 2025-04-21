@@ -8,7 +8,7 @@ import argparse
 import json
 import re
 
-from typing import List, Dict, Never, Any
+from typing import List, Dict, Tuple, Never, Any
 
 
 logging.addLevelName(100, "START")
@@ -50,42 +50,79 @@ def calculate_uptime(log: List[str]) -> float:
 
     return accounted_uptime / (accounted_uptime + accounted_downtime)
 
+
+def get_log_entry_time(line: str) -> int:
+    segments = line.split()
+    t = int(segments[0][1:-1])
+    return t
+
+def get_period_before(log: List[str], i: int, period: int) -> List[str]:
+    j = i
+    while j > 0 and get_log_entry_time(log[i]) - get_log_entry_time(log[j]) < period:
+        j -= 1
+
+    return log[j:i + 1]
+
+def calculate_section_uptime(section: List[str], period=2000) -> Tuple[bool, float, float]:
+    accounted_uptime = 0
+    accounted_downtime = 0
+
+    if section[0].strip().endswith("ms"):
+        period = int(section[0].strip().split()[-1][:-2])
+
+    current_period = period
+    for i in range(len(section)):
+        line = section[i].strip()
+        if line.endswith("ms"):
+            current_period = int(line.split(" ")[-1][:-2])
+            continue
+
+        elif line.endswith("success"):
+            accounted_uptime += current_period
+            continue
+
+        elif line.endswith("FAILED"):
+            accounted_downtime += current_period
+            continue
+
+    if (accounted_uptime + accounted_downtime) == 0:
+        return False, None, None
+
+    section_uptime = 100 * accounted_uptime / (accounted_uptime + accounted_downtime)
+    return True, section_uptime, period
+
+def calculate_log_rolling_uptimes(log: List[str], give_24hr_delta: bool = True) -> List[Tuple[float, float]]:
+    uptimes = []
+    period = 2000
+    for i, line in enumerate(log):
+        delta_t = get_log_entry_time(line) - time.time()
+        delta_hours = delta_t / (60 * 60)
+
+        if delta_hours < -24:
+            continue
+
+        last_minute = get_period_before(log, i, 60)
+        valid, minute_uptime, period = calculate_section_uptime(last_minute, period)
+
+        if valid:
+            if give_24hr_delta:
+                uptimes.append((delta_hours, minute_uptime))
+            else:
+                uptimes.append((get_log_entry_time(line), minute_uptime))
+
+    return uptimes
+
 def calculate_disruptions(log: List[str]) -> List[Dict[str, int]]:
     disruptions = []
-    rolling_window = []
+    start_time = 0
     in_disruption = False
-    for line in log:
-        line_sections = line.split()
-        t = int(line_sections[0][1:-1])
-        result = line_sections[-1]
-
-        if result[-2:] == "ms":
-            continue
-
-        rolling_window.append((t, result))
-        while len(rolling_window) > 1:
-            if rolling_window[-1][0] - rolling_window[0][0] > 60:
-                rolling_window.pop(0)
-            else:
-                break
-
-        if len(rolling_window) < 2:
-            continue
-        
-        total_t = 0
-        success_t = 0
-        for i in range(1, len(rolling_window)):
-            delta_t = rolling_window[i][0] - rolling_window[i - 1][0]
-            total_t += delta_t
-            if rolling_window[i][1] == "success":
-                success_t += delta_t
-
-        uptime = (success_t / total_t)
-        if not in_disruption and total_t > 50 and uptime < 0.80:
-            disruptions.append({ "start" : rolling_window[0][0], "end" : -1})
+    uptimes = calculate_log_rolling_uptimes(log, False)
+    for uptime in uptimes:
+        if not in_disruption and uptime[1] < 80:
+            start_time = uptime[0]
             in_disruption = True
-        elif in_disruption and total_t > 50 and uptime > 0.90:
-            disruptions[-1]["end"] = rolling_window[-1][0]
+        elif in_disruption and uptime[1] > 90:
+            disruptions.append({ "start" : start_time, "end" : uptime[0]})
             in_disruption = False
 
 

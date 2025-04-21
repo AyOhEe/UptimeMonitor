@@ -38,64 +38,6 @@ def script_js():
     return Response(content, 200, {"Content-Type" : "text/javascript; charset=utf-8"})
 
 
-def get_log_entry_time(line: str) -> int:
-    segments = line.split()
-    t = int(segments[0][1:-1])
-    return t
-
-def get_period_before(log: List[str], i: int, period: int) -> List[str]:
-    j = i
-    while j > 0 and get_log_entry_time(log[i]) - get_log_entry_time(log[j]) < period:
-        j -= 1
-
-    return log[j:i + 1]
-
-def calculate_section_uptime(section: List[str], period=2000) -> Tuple[bool, float, float]:
-    accounted_uptime = 0
-    accounted_downtime = 0
-
-    if section[0].strip().endswith("ms"):
-        period = int(section[0].strip().split()[-1][:-2])
-
-    current_period = period
-    for i in range(len(section)):
-        line = section[i].strip()
-        if line.endswith("ms"):
-            current_period = int(line.split(" ")[-1][:-2])
-            continue
-
-        elif line.endswith("success"):
-            accounted_uptime += current_period
-            continue
-
-        elif line.endswith("FAILED"):
-            accounted_downtime += current_period
-            continue
-
-    if (accounted_uptime + accounted_downtime) == 0:
-        return False, None, None
-
-    section_uptime = 100 * accounted_uptime / (accounted_uptime + accounted_downtime)
-    return True, section_uptime, period
-
-def calculate_log_rolling_uptimes(log: List[str]) -> List[Tuple[float, float]]:
-    uptimes = []
-    period = 2000
-    for i, line in enumerate(log):
-        delta_t = get_log_entry_time(line) - time.time()
-        delta_hours = delta_t / (60 * 60)
-
-        if delta_hours < -24:
-            continue
-
-        last_minute = get_period_before(log, i, 60)
-        valid, minute_uptime, period = calculate_section_uptime(last_minute, period)
-
-        if valid:
-            uptimes.append((delta_hours, minute_uptime))
-
-    return uptimes
-
 def calculate_uptime_data() -> List[Tuple[float, float]]:
     yesterday = time.localtime(time.time() - 24*60*60)
     yesterday_str = time.strftime('%Y-%m-%d', yesterday)
@@ -115,7 +57,7 @@ def calculate_uptime_data() -> List[Tuple[float, float]]:
     except FileNotFoundError:
         pass
 
-    return calculate_log_rolling_uptimes(log)
+    return ut.calculate_log_rolling_uptimes(log)
 
 #shows past 24hrs of uptime on a graph
 @app.get("/uptime_graph.svg", response_class=FileResponse)
