@@ -5,6 +5,9 @@ import platform
 import time
 import logging
 import argparse
+import json
+
+from typing import List, Dict, Never, Any
 
 
 logging.addLevelName(100, "START")
@@ -23,25 +26,67 @@ file_handler.setFormatter(formatter)
 LOGGER.addHandler(file_handler)
 
 
+def calculate_uptime(log: List[str]) -> float:
+    accounted_uptime = 0
+    accounted_downtime = 0
 
-def generate_precompute():
+    period = 2000
+
+    for line in log:
+        if line.endswith("ms"):
+            period = int(line.split(" ")[-1][:-2])
+            continue
+
+        if line.endswith("success"):
+            accounted_uptime += period
+            continue
+
+        if line.endswith("FAILED"):
+            accounted_downtime += period
+            continue
+
+    return accounted_uptime / (accounted_uptime + accounted_downtime)
+
+def calculate_disruptions(log: List[str]) -> List[Dict[str, int]]:
+    return []
+
+def generate_precompute() -> Dict[str, Any]:
+    yesterday = time.localtime(time.time() - 24*60*60)
+    yesterday_str = time.strftime('%Y-%m-%d', yesterday)
+    yesterday_log = f"logs/{yesterday_str}-uptime.log"
+
+    if not os.path.exists(yesterday_log):
+        return
+    
+
+    with open(f"logs/{yesterday}-uptime.log", "r") as f:
+        log = f.readlines()
+        precompute = {
+            "daily-uptime": calculate_uptime(log),
+            "disruptions": calculate_disruptions(log)
+        }
+    
+    if not os.path.isdir("precomputes"):
+        os.mkdir("precomputes", 777)
+    
+    with open(f"precomputes/{yesterday_str}-uptime.json", "w") as f:
+        json.dump(precompute, f)
+
+def remove_old_logs() -> None:
     pass
 
-def remove_old_logs():
-    pass
-
-def perform_daily_tasks():
+def perform_daily_tasks() -> None:
     generate_precompute()
     remove_old_logs()
 
 
-def is_first_of_month():
+def is_first_of_month() -> bool:
     pass
 
-def generate_month_disruption_report():
+def generate_month_disruption_report() -> None:
     pass
 
-def generate_month_disruption_graph():
+def generate_month_disruption_graph() -> None:
     pass
 
 def perform_monthly_tasks():
@@ -51,11 +96,11 @@ def perform_monthly_tasks():
 
 
 
-def is_accessible(target: str):
+def is_accessible(target: str) -> bool:
     command = ["ping", "-n", "1"] if platform.platform().startswith("Windows") else ["ping", "-c", "1"]
     return subprocess.call(command + [target], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT) == 0
 
-def start_monitor(target: str, delay: float, use_stdout: bool = False):
+def start_monitor(target: str, delay: float, use_stdout: bool = False) -> Never:
     if use_stdout:
         stdout_handler = logging.StreamHandler(sys.stdout)
         stdout_handler.setFormatter(formatter)
