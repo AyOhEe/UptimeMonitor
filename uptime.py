@@ -6,6 +6,7 @@ import time
 import logging
 import argparse
 import json
+import re
 
 from typing import List, Dict, Never, Any
 
@@ -111,7 +112,12 @@ def generate_precompute() -> Dict[str, Any]:
         json.dump(precompute, f, indent=4)
 
 def remove_old_logs() -> None:
-    pass
+    all_logs = [f for f in os.listdir("logs/") if re.match("[0-9]{4}-[01][0-9]-[0-3][0-9]-uptime.log", f)]
+    for log_name in all_logs:
+        log_path = "logs/" + log_name
+        log_last_modified = os.stat(log_path).st_mtime
+        if time.time() - log_last_modified > 31*24*60*60 + 120:
+            os.remove(log_path)
 
 def perform_daily_tasks() -> None:
     generate_precompute()
