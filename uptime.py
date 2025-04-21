@@ -80,7 +80,7 @@ def calculate_disruptions(log: List[str]) -> List[Dict[str, int]]:
 
         uptime = (success_t / total_t)
         if not in_disruption and total_t > 50 and uptime < 0.20:
-            disruptions.append({ "start" : rolling_window[0][0] })
+            disruptions.append({ "start" : rolling_window[0][0], "end" : -1})
             in_disruption = True
         elif in_disruption and total_t > 50 and uptime > 0.70:
             disruptions[-1]["end"] = rolling_window[-1][0]

@@ -1,4 +1,6 @@
 import pygal
+import time
+import uptime as ut
 
 from enum import Enum
 from typing import List
@@ -70,12 +72,27 @@ def get_disruptions_past() -> List[DisruptionInstance]:
     return []
 
 def get_disruptions_today() -> List[DisruptionInstance]:
-    return []
+    today = time.localtime()
+    today_str = time.strftime('%Y-%m-%d', today)
+    today_log = f"logs/{today_str}-uptime.log"
+    try:
+        with open(today_log, "r") as f:
+            log = f.readlines()
+    except FileNotFoundError:
+        return []
+
+    disruptions = ut.calculate_disruptions(log)
+    disruptions = [DisruptionInstance(d["start"], d["end"]) for d in disruptions]
+
+    return disruptions
 
 #returns a list of all disruptions between now and {period} seconds ago
 @app.get("/disruptions")
 def disruptions(period: int = Query(ge=0)) -> DisruptionHistory:
     historic = get_disruptions_past()
     today = get_disruptions_today()
+
+    disruptions = historic + today
+    disruptions = [d for d in disruptions if time.time() - d.end < period]
 
     return DisruptionHistory(disruptions=historic + today)
