@@ -1,5 +1,8 @@
 import pygal
 import time
+import os
+import re
+import json
 import uptime as ut
 
 from enum import Enum
@@ -69,7 +72,16 @@ class DisruptionHistory(BaseModel):
     disruptions: List[DisruptionInstance] = []
 
 def get_disruptions_past() -> List[DisruptionInstance]:
-    return []
+    disruptions = []
+    all_precomputes = [f for f in os.listdir("precomputes/") if re.match("[0-9]{4}-[01][0-9]-[0-3][0-9]-uptime.json", f)]
+    for precompute in all_precomputes:
+        with open(f"precomputes/{precompute}", "r") as f:
+            contents = json.load(f)
+            disruptions += contents["disruptions"]
+
+
+    disruptions = [DisruptionInstance(start=d["start"], end=d["end"]) for d in disruptions]
+    return disruptions
 
 def get_disruptions_today() -> List[DisruptionInstance]:
     today = time.localtime()
@@ -82,7 +94,7 @@ def get_disruptions_today() -> List[DisruptionInstance]:
         return []
 
     disruptions = ut.calculate_disruptions(log)
-    disruptions = [DisruptionInstance(d["start"], d["end"]) for d in disruptions]
+    disruptions = [DisruptionInstance(start=d["start"], end=d["end"]) for d in disruptions]
 
     return disruptions
 
@@ -95,4 +107,7 @@ def disruptions(period: int = Query(ge=0)) -> DisruptionHistory:
     disruptions = historic + today
     disruptions = [d for d in disruptions if time.time() - d.end < period]
 
-    return DisruptionHistory(disruptions=historic + today)
+    for disruption in disruptions:
+        print (time.time() - disruption.end)
+
+    return DisruptionHistory(disruptions=disruptions)
