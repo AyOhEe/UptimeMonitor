@@ -18,15 +18,24 @@ app = FastAPI()
 #demo page which uses the endpoints
 @app.get("/", response_class=HTMLResponse)
 def index_html():
-    return Response("<h1>Hello, world!</h1><img src='uptime_graph.svg'></img>", 200, {"Content-Type" : "text/html; charset=utf-8"})
+    content = "Failed to load web/index.html"
+    with open("web/index.html", "r") as f:
+        content = f.read()
+    return Response(content, 200, {"Content-Type" : "text/html; charset=utf-8"})
 
 @app.get("/styles.css", response_class=FileResponse)
 def styles_css():
-    return Response("", 200, {"Content-Type" : "text/css; charset=utf-8"})
+    content = "Failed to load web/styles.css"
+    with open("web/styles.css", "r") as f:
+        content = f.read()
+    return Response(content, 200, {"Content-Type" : "text/css; charset=utf-8"})
 
 @app.get("/script.js", response_class=FileResponse)
 def script_js():
-    return Response("", 200, {"Content-Type" : "text/javascript; charset=utf-8"})
+    content = "Failed to load web/script.js"
+    with open("web/script.js", "r") as f:
+        content = f.read()
+    return Response(content, 200, {"Content-Type" : "text/javascript; charset=utf-8"})
 
 
 #shows past 24hrs of uptime on a graph
