@@ -48,7 +48,45 @@ def calculate_uptime(log: List[str]) -> float:
     return accounted_uptime / (accounted_uptime + accounted_downtime)
 
 def calculate_disruptions(log: List[str]) -> List[Dict[str, int]]:
-    return []
+    disruptions = []
+    rolling_window = []
+    in_disruption = False
+    for line in log:
+        line_sections = line.split()
+        t = int(line_sections[0][1:-1])
+        result = line_sections[-1]
+
+        if result[-2:] == "ms":
+            continue
+
+        rolling_window.append((t, result))
+        while len(rolling_window) > 1:
+            if rolling_window[-1][0] - rolling_window[0][0] > 60:
+                rolling_window.pop(0)
+            else:
+                break
+
+        if len(rolling_window) < 2:
+            continue
+        
+        total_t = 0
+        success_t = 0
+        for i in range(1, len(rolling_window)):
+            delta_t = rolling_window[i][0] - rolling_window[i - 1][0]
+            total_t += delta_t
+            if rolling_window[i][1] == "success":
+                success_t += delta_t
+
+        uptime = (success_t / total_t)
+        if not in_disruption and total_t > 50 and uptime < 0.20:
+            disruptions.append({ "start" : rolling_window[0][0] })
+            in_disruption = True
+        elif in_disruption and total_t > 50 and uptime > 0.70:
+            disruptions[-1]["end"] = rolling_window[-1][0]
+            in_disruption = False
+
+
+    return disruptions
 
 def generate_precompute() -> Dict[str, Any]:
     yesterday = time.localtime(time.time() - 24*60*60)
@@ -59,7 +97,7 @@ def generate_precompute() -> Dict[str, Any]:
         return
     
 
-    with open(f"logs/{yesterday}-uptime.log", "r") as f:
+    with open(f"logs/{yesterday_str}-uptime.log", "r") as f:
         log = f.readlines()
         precompute = {
             "daily-uptime": calculate_uptime(log),
@@ -70,7 +108,7 @@ def generate_precompute() -> Dict[str, Any]:
         os.mkdir("precomputes", 777)
     
     with open(f"precomputes/{yesterday_str}-uptime.json", "w") as f:
-        json.dump(precompute, f)
+        json.dump(precompute, f, indent=4)
 
 def remove_old_logs() -> None:
     pass
