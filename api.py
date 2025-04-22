@@ -59,6 +59,19 @@ def calculate_uptime_data() -> List[Tuple[float, float]]:
 
     return ut.calculate_log_rolling_uptimes(log)
 
+def insert_none_at_gaps(data: List[Tuple[float, float]], gap: float) -> List[Tuple[float, float]]:
+    i = 1
+    while i < len(data):
+        left = data[i - 1]
+        right = data[i]
+        if right[0] - left[0] > gap:
+            data.insert(i, (left[0] + gap/3, None))
+            data.insert(i + 1, (right[0] - gap/3, None))
+            i += 2
+        i += 1
+
+    return data
+
 #shows past 24hrs of uptime on a graph
 @app.get("/uptime_graph.svg", response_class=FileResponse)
 def uptime_graph() -> Response:
@@ -74,7 +87,10 @@ def uptime_graph() -> Response:
     graph.x_labels = [0, -6, -12, -18, -24]
     graph.y_labels = [0.00, 20.0, 50.0, 70.0, 100.0]
 
-    graph.add("Uptime", calculate_uptime_data())
+    data = calculate_uptime_data()
+    data = insert_none_at_gaps(data, 1/60)
+    print(data)
+    graph.add("Uptime", data, allow_interruptions=True)
     graph.add("Disruption end threshold", [
         (-24, 90.0),
         (0, 90.0)
