@@ -80,6 +80,7 @@ def uptime_graph() -> Response:
         x_value_formatter=lambda x: f"{x}hrs",
         y_value_formatter=lambda y: f"{y*100.0:2.1}%",
         show_dots=False,
+        show_x_guides=True,
         width=1500,
         legend_at_bottom=True,
         legend_at_bottom_columns=3
@@ -89,7 +90,6 @@ def uptime_graph() -> Response:
 
     data = calculate_uptime_data()
     data = insert_none_at_gaps(data, 1/60)
-    print(data)
     graph.add("Uptime", data, allow_interruptions=True)
     graph.add("Disruption end threshold", [
         (-24, 90.0),
