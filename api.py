@@ -105,8 +105,8 @@ def uptime_graph() -> Response:
 
 
 class ConnectionResult(Enum):
-    FAIL = "FAIL"
-    SUCCESS = "SUCCESS"
+    FAIL = False
+    SUCCESS = True
 
 class ConnectionTest(BaseModel):
     timestamp: int = Field(ge=0)
@@ -115,10 +115,36 @@ class ConnectionTest(BaseModel):
 class RawUptimeData(BaseModel):
     entries: List[ConnectionTest] = []
 
-#raw data since provided date, up to 31 days in the past, between now and {period} seconds ago
+def process_log_file(log_path: str) -> List[ConnectionTest]:
+    tests = []
+    with open(log_path, "r") as f:
+        for line in f.readlines():
+            segments = line.split()
+            time = int(segments[0][1:-1])
+
+            if segments[-1].endswith("FAILED"):
+                tests.append(ConnectionTest(timestamp=time, result=ConnectionResult.FAIL))
+                
+            if segments[-1].endswith("success"):
+                tests.append(ConnectionTest(timestamp=time, result=ConnectionResult.SUCCESS))
+
+    return tests
+
+#raw data since provided date, up to 3 days in the past, between now and {period} seconds ago
 @app.get("/raw")
 def raw(period: int = Query(ge=0, le=31*24*60*60)) -> RawUptimeData:
-    return RawUptimeData()
+    all_logs = [f for f in os.listdir("logs/") if re.match("[0-9]{4}-[01][0-9]-[0-3][0-9]-uptime.log", f)]
+    full_log = []
+    for log_path in all_logs:
+        full_log += process_log_file("logs/" + log_path)
+
+    start_t = time.time()
+    for i, entry in enumerate(full_log):
+        if entry.timestamp > start_t - period:
+            return RawUptimeData(entries=full_log[i:])
+    
+    return RawUptimeData(entries=[])
+
 
 
 class UptimeReport(BaseModel):
