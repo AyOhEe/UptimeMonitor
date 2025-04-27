@@ -206,6 +206,7 @@ def is_accessible(target: str) -> bool:
     return subprocess.call(command + [target], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT) == 0
 
 def start_monitor(target: str, delay: float, use_stdout: bool = False) -> Never:
+    start_day = time.localtime().tm_yday
     if use_stdout:
         stdout_handler = logging.StreamHandler(sys.stdout)
         stdout_handler.setFormatter(formatter)
@@ -213,6 +214,9 @@ def start_monitor(target: str, delay: float, use_stdout: bool = False) -> Never:
 
     LOGGER.log(100, f"Beginning to monitor {target} every {delay}ms")
     while True:
+        if time.localtime().tm_yday != start_day:
+            return
+
         start_time = time.time_ns()
         if is_accessible(target):
             LOGGER.info(f"success")
@@ -247,4 +251,6 @@ if __name__ == "__main__":
 
     perform_daily_tasks()
     perform_monthly_tasks()
-    start_monitor(args.target, args.period, use_stdout=args.stdout)
+
+    while True:
+        start_monitor(args.target, args.period, use_stdout=args.stdout)
