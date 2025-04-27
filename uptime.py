@@ -262,13 +262,13 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    perform_daily_tasks()
-    perform_monthly_tasks()
 
     create_pid_file()
-
     signal.signal(signal.SIGINT, remove_pid_file)
     signal.signal(signal.SIGTERM, remove_pid_file)
 
     while True:
+        perform_daily_tasks()
+        perform_monthly_tasks()
+
         start_monitor(args.target, args.period, use_stdout=args.stdout)
