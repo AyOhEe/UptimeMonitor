@@ -8,7 +8,7 @@ import argparse
 import json
 import re
 
-from typing import List, Dict, Tuple, Never, Any
+from typing import List, Dict, Tuple, Never, Any, Generator
 
 
 logging.addLevelName(100, "START")
@@ -133,6 +133,9 @@ def generate_precompute() -> Dict[str, Any]:
     yesterday_str = time.strftime('%Y-%m-%d', yesterday)
     yesterday_log = f"logs/{yesterday_str}-uptime.log"
 
+    if not os.path.isdir("precomputes"):
+        os.mkdir("precomputes", 777)
+
     if not os.path.exists(yesterday_log):
         return
     
@@ -143,9 +146,6 @@ def generate_precompute() -> Dict[str, Any]:
             "daily-uptime": calculate_uptime(log),
             "disruptions": calculate_disruptions(log)
         }
-    
-    if not os.path.isdir("precomputes"):
-        os.mkdir("precomputes", 777)
     
     with open(f"precomputes/{yesterday_str}-uptime.json", "w") as f:
         json.dump(precompute, f, indent=4)
@@ -166,8 +166,30 @@ def perform_daily_tasks() -> None:
 def is_first_of_month() -> bool:
     return time.localtime(time.time()).tm_mday == 1
 
+def calculate_last_month() -> int:
+    return ((time.localtime().tm_mon - 2) % 12) + 1
+
+def last_month_precomputes() -> Generator[str, None, None]:
+    all_precomputes = [f for f in os.listdir("precomputes/") if re.match("[0-9]{4}-[01][0-9]-[0-3][0-9]-uptime.json", f)]
+    last_month = calculate_last_month()
+    print(last_month)
+    for precompute in all_precomputes:
+        date = time.strptime(precompute[:10], "%Y-%m-%d")
+        print(date)
+        if date.tm_mon == last_month:
+            yield precompute
+
 def generate_month_disruption_report() -> None:
-    pass
+    disruptions = []
+    for precompute in last_month_precomputes():
+        with open(f"precomputes/{precompute}", "r") as f:
+            contents = json.load(f)
+            disruptions += contents["disruptions"]
+
+    year = time.localtime().tm_year
+    last_month = calculate_last_month()
+    with open(f"precomputes/{year}-{last_month:02}-disruption.json", "w") as f:
+        json.dump({ "disruptions" : disruptions }, f, indent=4)
 
 def generate_month_disruption_graph() -> None:
     pass
