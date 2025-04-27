@@ -7,6 +7,7 @@ import logging
 import argparse
 import json
 import re
+import signal
 
 from typing import List, Dict, Tuple, Never, Any, Generator
 
@@ -228,6 +229,16 @@ def start_monitor(target: str, delay: float, use_stdout: bool = False) -> Never:
         time.sleep(max(sleep_time, 0))
 
 
+def create_pid_file():
+    with open(".pid", "w") as f:
+        f.write(str(os.getpid()))
+
+def remove_pid_file(sig, frame):
+    if os.path.exists(".pid"):
+        os.remove(".pid")
+
+    exit(0)
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -251,6 +262,11 @@ if __name__ == "__main__":
 
     perform_daily_tasks()
     perform_monthly_tasks()
+
+    create_pid_file()
+
+    signal.signal(signal.SIGINT, remove_pid_file)
+    signal.signal(signal.SIGTERM, remove_pid_file)
 
     while True:
         start_monitor(args.target, args.period, use_stdout=args.stdout)
