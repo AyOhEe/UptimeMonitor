@@ -23,9 +23,12 @@ jobs:
     
     steps:
       - name: Kill existing process
-        run: pkill $(cat .pid) || true
+        run: |
+          pkill $(cat .pid) || true
+          sudo pkill -9 -f fastapi
 
       - name: Run api.py
         run: |
           source UptimeMonitor/bin/activate
-          python3 uptime.py --target 8.8.8.8 --period 2000 --stdout
+          python3 uptime.py --target 8.8.8.8 --period 2000 &
+          nohup fastapi run api.py &> api.log &
