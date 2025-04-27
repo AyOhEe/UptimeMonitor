@@ -9,7 +9,9 @@ from enum import Enum
 from typing import List, Tuple
 from fastapi import FastAPI, Query, Response
 from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.exceptions import HTTPException
 from pydantic import BaseModel, Field
+from datetime import datetime
 
 
 app = FastAPI()
@@ -150,10 +152,38 @@ def raw(period: int = Query(ge=0, le=31*24*60*60)) -> RawUptimeData:
 class UptimeReport(BaseModel):
     uptime: float = Field(1.0, ge=0, le=1)
 
-#returns average uptime between now and {period} seconds ago
+#returns average uptime since the provided date
 @app.get("/uptime")
-def uptime(period: int = Query(ge=0)) -> UptimeReport:
-    return UptimeReport()
+def uptime(since: str = Query(regex="[0-9]{4}-[01][0-9]-[0-3][0-9]")) -> UptimeReport:
+    start_date = datetime.strptime(since, "%Y-%m-%d")
+    if (start_date - datetime.now()).days >= 0:
+        raise HTTPException(status_code=424, detail=f"Date ?{since=} is in the future")
+
+    historical_uptime = []
+    all_precomputes = [f for f in os.listdir("precomputes/") if re.match("[0-9]{4}-[01][0-9]-[0-3][0-9]-uptime.json", f)]
+    for precompute in all_precomputes:
+        precompute_date = datetime.strptime(precompute[:10], "%Y-%m-%d")
+        if (start_date - precompute_date).days > 0:
+            continue
+
+        with open(f"precomputes/{precompute}", "r") as f:
+            contents = json.load(f)
+            historical_uptime.append(contents["daily-uptime"])
+
+    today = time.localtime()
+    today_str = time.strftime('%Y-%m-%d', today)
+    today_log = f"logs/{today_str}-uptime.log"
+    today_uptime = 1.0
+    try:
+        with open(today_log, "r") as f:
+            today_uptime = ut.calculate_uptime(f.readlines())
+    except FileNotFoundError:
+        pass
+    
+    overall_uptime = historical_uptime + [today_uptime]
+    average_uptime = sum(overall_uptime) / len(overall_uptime)
+    
+    return UptimeReport(uptime=average_uptime)
 
 
 class DisruptionInstance(BaseModel):
