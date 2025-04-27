@@ -8,6 +8,7 @@ import argparse
 import json
 import re
 import signal
+import stat
 
 from typing import List, Dict, Tuple, Never, Any, Generator
 
@@ -21,7 +22,8 @@ formatter.formatTime = lambda record, datefmt=None: str(int(time.time()))
 
 TODAY = time.strftime('%Y-%m-%d')
 if not os.path.isdir("logs"):
-    os.mkdir("logs", 777)
+    os.mkdir("logs", stat.S_IRWXU | stat.S_IRGRP | stat.S_IROTH | stat.S_IXGRP | stat.S_IXOTH)
+
 file_handler = logging.FileHandler(f"logs/{TODAY}-uptime.log")
 file_handler.setFormatter(formatter)
 
@@ -135,7 +137,7 @@ def generate_precompute() -> Dict[str, Any]:
     yesterday_log = f"logs/{yesterday_str}-uptime.log"
 
     if not os.path.isdir("precomputes"):
-        os.mkdir("precomputes", 777)
+        os.mkdir("precomputes", stat.S_IRWXU | stat.S_IRGRP | stat.S_IROTH | stat.S_IXGRP | stat.S_IXOTH)
 
     if not os.path.exists(yesterday_log):
         return
