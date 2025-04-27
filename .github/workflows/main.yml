@@ -25,7 +25,7 @@ jobs:
       - name: Kill existing process
         run: |
           pkill $(cat .pid) || true
-          sudo pkill -9 -f fastapi
+          pkill -9 -f fastapi
 
       - name: Run api.py
         run: |
