@@ -256,7 +256,7 @@ if __name__ == "__main__":
         "--stdout",
         default=False,
         action="store_true",
-        help="Disables output to stdout"
+        help="Enables output to stdout"
     )
     args = parser.parse_args()
 
