@@ -24,7 +24,7 @@ jobs:
     steps:
       - name: Kill existing process
         run: |
-          pkill $(cat .pid) || true
+          [ ! -f .pid ] || pkill $(cat .pid)
           pkill -9 -f fastapi
 
       - name: Run api.py
