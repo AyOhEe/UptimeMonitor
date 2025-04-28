@@ -24,7 +24,7 @@ jobs:
     steps:
       - name: Kill existing process
         run: |
-          if [ ! -f .pid ] then
+          if [ -f .pid ]; then
             pkill $(cat .pid)
           fi
           pkill -9 -f fastapi
