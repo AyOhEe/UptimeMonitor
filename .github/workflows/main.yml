@@ -27,7 +27,7 @@ jobs:
           if [ -f .pid ]; then
             pkill $(cat .pid)
           fi
-          pkill -9 -f fastapi
+          pkill -9 -f fastapi || true
 
       - name: Run uptime.py and api.py
         run: |
