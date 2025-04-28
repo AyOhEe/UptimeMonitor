@@ -24,10 +24,12 @@ jobs:
     steps:
       - name: Kill existing process
         run: |
-          [ ! -f .pid ] || pkill $(cat .pid)
+          if [ ! -f .pid ] then
+            pkill $(cat .pid)
+          fi
           pkill -9 -f fastapi
 
-      - name: Run api.py
+      - name: Run uptime.py and api.py
         run: |
           source UptimeMonitor/bin/activate
           python3 uptime.py --target 8.8.8.8 --period 2000 &
