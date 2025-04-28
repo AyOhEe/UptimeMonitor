@@ -24,7 +24,6 @@ jobs:
     steps:
       - name: Kill existing process
         run: |
-          RUNNER_TRACKING_ID=""
           if [ -f .pid ]; then
             pkill $(cat .pid)
           fi
@@ -32,6 +31,7 @@ jobs:
 
       - name: Run uptime.py and api.py
         run: |
+          RUNNER_TRACKING_ID=""
           source UptimeMonitor/bin/activate
           nohup python3 uptime.py --target 8.8.8.8 --period 2000 &
           nohup fastapi run api.py &> api.log &
