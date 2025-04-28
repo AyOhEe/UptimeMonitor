@@ -31,7 +31,7 @@ jobs:
 
       - name: Run uptime.py and api.py
         run: |
-          RUNNER_TRACKING_ID=""
           source UptimeMonitor/bin/activate
-          nohup python3 uptime.py --target 8.8.8.8 --period 2000 &
-          nohup fastapi run api.py &> api.log &
+          at now python3 uptime.py --target 8.8.8.8 --period 2000
+          at now fastapi run api.py &> api.log
+          ps all
