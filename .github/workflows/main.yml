@@ -28,10 +28,11 @@ jobs:
             pkill $(cat .pid)
           fi
           pkill -9 -f fastapi || true
+          pkill -9 -f yes || true
 
       - name: Run uptime.py and api.py
         run: |
-          source UptimeMonitor/bin/activate
-          at now python3 uptime.py --target 8.8.8.8 --period 2000
-          at now fastapi run api.py &> api.log
+          RUNNER_TRACKING_ID=""
+          start_uptime.sh 1> /dev/null 2> /dev/null &
+          start_api.sh 1> /dev/null 2> /dev/null &
           ps all
