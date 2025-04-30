@@ -34,6 +34,6 @@ jobs:
         run: |
           RUNNER_TRACKING_ID=""
           source UptimeMonitor/bin/activate
-          start_uptime.sh
-          start_api.sh
+          ./start_uptime.sh
+          ./start_api.sh
           ps all
