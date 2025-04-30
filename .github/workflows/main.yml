@@ -32,10 +32,8 @@ jobs:
 
       - name: Run uptime.py and api.py
         run: |
-          RUNNER_TRACKING_ID=""
           source UptimeMonitor/bin/activate
           chmod 777 start_uptime.sh
           chmod 777 start_api.sh
           ./start_uptime.sh
           ./start_api.sh
-          ps all
