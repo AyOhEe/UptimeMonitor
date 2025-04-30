@@ -33,6 +33,7 @@ jobs:
       - name: Run uptime.py and api.py
         run: |
           RUNNER_TRACKING_ID=""
-          start_uptime.sh 1> /dev/null 2> /dev/null &
-          start_api.sh 1> /dev/null 2> /dev/null &
+          source UptimeMonitor/bin/activate
+          start_uptime.sh
+          start_api.sh
           ps all
