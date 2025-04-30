@@ -12,6 +12,7 @@ import stat
 
 from typing import List, Dict, Tuple, Never, Any, Generator
 
+LOGS_DIR = "~/uptime_logs"
 
 logging.addLevelName(100, "START")
 LOGGER = logging.getLogger("uptime")
@@ -19,15 +20,6 @@ LOGGER.setLevel(logging.INFO)
 
 formatter = logging.Formatter("[%(asctime)s]\t[%(levelname)s]:\t %(message)s")
 formatter.formatTime = lambda record, datefmt=None: str(int(time.time()))
-
-TODAY = time.strftime('%Y-%m-%d')
-if not os.path.isdir("logs"):
-    os.mkdir("logs", stat.S_IRWXU | stat.S_IRGRP | stat.S_IROTH | stat.S_IXGRP | stat.S_IXOTH)
-
-file_handler = logging.FileHandler(f"logs/{TODAY}-uptime.log")
-file_handler.setFormatter(formatter)
-
-LOGGER.addHandler(file_handler)
 
 
 def calculate_uptime(log: List[str]) -> float:
@@ -241,6 +233,19 @@ def remove_pid_file(sig, frame):
 
     exit(0)
 
+
+def create_logging_handler():
+    global LOGS_DIR
+
+    TODAY = time.strftime('%Y-%m-%d')
+    if not os.path.isdir(LOGS_DIR):
+        os.mkdir(LOGS_DIR, stat.S_IRWXU | stat.S_IRGRP | stat.S_IROTH | stat.S_IXGRP | stat.S_IXOTH)
+
+    file_handler = logging.FileHandler(f"{LOGS_DIR}/{TODAY}-uptime.log")
+    file_handler.setFormatter(formatter)
+
+    LOGGER.addHandler(file_handler)
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -255,6 +260,12 @@ if __name__ == "__main__":
         help="How often, in milliseconds, to ping the target"
     )
     parser.add_argument(
+        "--logs",
+        default="~/uptime_logs",
+        type=str,
+        help="Directory where logs are stored"
+    )
+    parser.add_argument(
         "--stdout",
         default=False,
         action="store_true",
@@ -267,6 +278,8 @@ if __name__ == "__main__":
     signal.signal(signal.SIGINT, remove_pid_file)
     signal.signal(signal.SIGTERM, remove_pid_file)
 
+    LOGS_DIR = args.logs
+    create_logging_handler()
     while True:
         perform_daily_tasks()
         perform_monthly_tasks()
