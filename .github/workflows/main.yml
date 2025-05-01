@@ -12,6 +12,14 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
+      - name: Kill existing process
+        run: |
+          if [ -f .pid ]; then
+            pkill $(cat .pid)
+          fi
+          pkill -9 -f fastapi || true
+          pkill -9 -f yes || true
+
       - name: Create new virtual env and activate it
         run: |
           python3 -m venv UptimeMonitor
@@ -22,14 +30,6 @@ jobs:
     needs: build
     
     steps:
-      - name: Kill existing process
-        run: |
-          if [ -f .pid ]; then
-            pkill $(cat .pid)
-          fi
-          pkill -9 -f fastapi || true
-          pkill -9 -f yes || true
-
       - name: Run uptime.py and api.py
         run: |
           RUNNER_TRACKING_ID=""
