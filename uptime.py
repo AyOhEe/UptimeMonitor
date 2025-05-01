@@ -124,9 +124,11 @@ def calculate_disruptions(log: List[str]) -> List[Dict[str, int]]:
     return disruptions
 
 def generate_precompute() -> Dict[str, Any]:
+    global LOGS_DIR
+
     yesterday = time.localtime(time.time() - 24*60*60)
     yesterday_str = time.strftime('%Y-%m-%d', yesterday)
-    yesterday_log = f"logs/{yesterday_str}-uptime.log"
+    yesterday_log = f"{LOGS_DIR}/{yesterday_str}-uptime.log"
 
     if not os.path.isdir("precomputes"):
         os.mkdir("precomputes", stat.S_IRWXU | stat.S_IRGRP | stat.S_IROTH | stat.S_IXGRP | stat.S_IXOTH)
@@ -135,7 +137,7 @@ def generate_precompute() -> Dict[str, Any]:
         return
     
 
-    with open(f"logs/{yesterday_str}-uptime.log", "r") as f:
+    with open(f"{LOGS_DIR}/{yesterday_str}-uptime.log", "r") as f:
         log = f.readlines()
         precompute = {
             "daily-uptime": calculate_uptime(log),
@@ -146,9 +148,11 @@ def generate_precompute() -> Dict[str, Any]:
         json.dump(precompute, f, indent=4)
 
 def remove_old_logs() -> None:
-    all_logs = [f for f in os.listdir("logs/") if re.match("[0-9]{4}-[01][0-9]-[0-3][0-9]-uptime.log", f)]
+    global LOGS_DIR
+    
+    all_logs = [f for f in os.listdir(LOGS_DIR) if re.match("[0-9]{4}-[01][0-9]-[0-3][0-9]-uptime.log", f)]
     for log_name in all_logs:
-        log_path = "logs/" + log_name
+        log_path = LOGS_DIR + log_name
         log_last_modified = os.stat(log_path).st_mtime
         if time.time() - log_last_modified > 31*24*60*60 + 120:
             os.remove(log_path)
