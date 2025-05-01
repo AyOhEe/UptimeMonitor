@@ -283,15 +283,16 @@ if __name__ == "__main__":
         stdout_handler.setFormatter(formatter)
         LOGGER.addHandler(stdout_handler)
 
-    create_pid_file()
-    signal.signal(signal.SIGINT, remove_pid_file)
-    signal.signal(signal.SIGTERM, remove_pid_file)
 
 
     LOGS_DIR = args.logs
     if not os.path.isdir(LOGS_DIR):
         os.mkdir(LOGS_DIR, stat.S_IRWXU | stat.S_IRGRP | stat.S_IROTH | stat.S_IXGRP | stat.S_IXOTH)
 
+    create_pid_file()
+    signal.signal(signal.SIGINT, remove_pid_file)
+    signal.signal(signal.SIGTERM, remove_pid_file)
+    
     create_logging_handler()
     while True:
         perform_daily_tasks()
