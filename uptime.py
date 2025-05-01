@@ -224,12 +224,16 @@ def start_monitor(target: str, delay: float) -> Never:
 
 
 def create_pid_file():
-    with open(".pid", "w") as f:
+    global LOGS_DIR
+
+    with open(f"{LOGS_DIR}/.pid", "w") as f:
         f.write(str(os.getpid()))
 
 def remove_pid_file(sig, frame):
-    if os.path.exists(".pid"):
-        os.remove(".pid")
+    global LOGS_DIR
+
+    if os.path.exists(f"{LOGS_DIR}/.pid"):
+        os.remove(f"{LOGS_DIR}/.pid")
 
     exit(0)
 
