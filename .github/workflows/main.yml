@@ -9,6 +9,7 @@ on:
 jobs:
   stop:
     runs-on: self-hosted
+    
     steps:
       - name: Kill existing process
         run: |
@@ -19,6 +20,8 @@ jobs:
           pkill -9 -f yes || true
   build:
     runs-on: self-hosted
+    needs: stop
+
     steps:
       - uses: actions/checkout@v2
       - name: Create new virtual env and activate it
