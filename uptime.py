@@ -130,21 +130,21 @@ def generate_precompute() -> Dict[str, Any]:
     yesterday_str = time.strftime('%Y-%m-%d', yesterday)
     yesterday_log = f"{LOGS_DIR}/{yesterday_str}-uptime.log"
 
-    if not os.path.isdir("precomputes"):
-        os.mkdir("precomputes", stat.S_IRWXU | stat.S_IRGRP | stat.S_IROTH | stat.S_IXGRP | stat.S_IXOTH)
+    if not os.path.isdir(f"{LOGS_DIR}/precomputes"):
+        os.mkdir(f"{LOGS_DIR}/precomputes", stat.S_IRWXU | stat.S_IRGRP | stat.S_IROTH | stat.S_IXGRP | stat.S_IXOTH)
 
     if not os.path.exists(yesterday_log):
         return
     
 
-    with open(f"{LOGS_DIR}/{yesterday_str}-uptime.log", "r") as f:
+    with open(f"{LOGS_DIR}/logs/{yesterday_str}-uptime.log", "r") as f:
         log = f.readlines()
         precompute = {
             "daily-uptime": calculate_uptime(log),
             "disruptions": calculate_disruptions(log)
         }
     
-    with open(f"precomputes/{yesterday_str}-uptime.json", "w") as f:
+    with open(f"{LOGS_DIR}/precomputes/{yesterday_str}-uptime.json", "w") as f:
         json.dump(precompute, f, indent=4)
 
 def remove_old_logs() -> None:
@@ -152,7 +152,7 @@ def remove_old_logs() -> None:
     
     all_logs = [f for f in os.listdir(LOGS_DIR) if re.match("[0-9]{4}-[01][0-9]-[0-3][0-9]-uptime.log", f)]
     for log_name in all_logs:
-        log_path = LOGS_DIR + log_name
+        log_path = f"{LOGS_DIR}/logs/{log_name}"
         log_last_modified = os.stat(log_path).st_mtime
         if time.time() - log_last_modified > 31*24*60*60 + 120:
             os.remove(log_path)
@@ -169,7 +169,7 @@ def calculate_last_month() -> int:
     return ((time.localtime().tm_mon - 2) % 12) + 1
 
 def last_month_precomputes() -> Generator[str, None, None]:
-    all_precomputes = [f for f in os.listdir("precomputes/") if re.match("[0-9]{4}-[01][0-9]-[0-3][0-9]-uptime.json", f)]
+    all_precomputes = [f for f in os.listdir(f"{LOGS_DIR}/precomputes") if re.match("[0-9]{4}-[01][0-9]-[0-3][0-9]-uptime.json", f)]
     last_month = calculate_last_month()
     print(last_month)
     for precompute in all_precomputes:
@@ -181,13 +181,13 @@ def last_month_precomputes() -> Generator[str, None, None]:
 def generate_month_disruption_report() -> None:
     disruptions = []
     for precompute in last_month_precomputes():
-        with open(f"precomputes/{precompute}", "r") as f:
+        with open(f"{LOGS_DIR}/precomputes/{precompute}", "r") as f:
             contents = json.load(f)
             disruptions += contents["disruptions"]
 
     year = time.localtime().tm_year
     last_month = calculate_last_month()
-    with open(f"precomputes/{year}-{last_month:02}-disruption.json", "w") as f:
+    with open(f"{LOGS_DIR}/precomputes/{year}-{last_month:02}-disruption.json", "w") as f:
         json.dump({ "disruptions" : disruptions }, f, indent=4)
 
 def generate_month_disruption_graph() -> None:
@@ -204,12 +204,8 @@ def is_accessible(target: str) -> bool:
     command = ["ping", "-n", "1"] if platform.platform().startswith("Windows") else ["ping", "-c", "1"]
     return subprocess.call(command + [target], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT) == 0
 
-def start_monitor(target: str, delay: float, use_stdout: bool = False) -> Never:
+def start_monitor(target: str, delay: float) -> Never:
     start_day = time.localtime().tm_yday
-    if use_stdout:
-        stdout_handler = logging.StreamHandler(sys.stdout)
-        stdout_handler.setFormatter(formatter)
-        LOGGER.addHandler(stdout_handler)
 
     LOGGER.log(100, f"Beginning to monitor {target} every {delay}ms")
     while True:
@@ -278,9 +274,15 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
 
+    if args.stdout:
+        stdout_handler = logging.StreamHandler(sys.stdout)
+        stdout_handler.setFormatter(formatter)
+        LOGGER.addHandler(stdout_handler)
+
     create_pid_file()
     signal.signal(signal.SIGINT, remove_pid_file)
     signal.signal(signal.SIGTERM, remove_pid_file)
+
 
     LOGS_DIR = args.logs
     create_logging_handler()
@@ -288,4 +290,4 @@ if __name__ == "__main__":
         perform_daily_tasks()
         perform_monthly_tasks()
 
-        start_monitor(args.target, args.period, use_stdout=args.stdout)
+        start_monitor(args.target, args.period)
