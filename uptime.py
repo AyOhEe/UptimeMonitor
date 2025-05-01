@@ -238,10 +238,10 @@ def create_logging_handler():
     global LOGS_DIR
 
     TODAY = time.strftime('%Y-%m-%d')
-    if not os.path.isdir(LOGS_DIR):
-        os.mkdir(LOGS_DIR, stat.S_IRWXU | stat.S_IRGRP | stat.S_IROTH | stat.S_IXGRP | stat.S_IXOTH)
+    if not os.path.isdir(f"{LOGS_DIR}/logs"):
+        os.mkdir(f"{LOGS_DIR}/logs", stat.S_IRWXU | stat.S_IRGRP | stat.S_IROTH | stat.S_IXGRP | stat.S_IXOTH)
 
-    file_handler = logging.FileHandler(f"{LOGS_DIR}/{TODAY}-uptime.log")
+    file_handler = logging.FileHandler(f"{LOGS_DIR}/logs/{TODAY}-uptime.log")
     file_handler.setFormatter(formatter)
 
     LOGGER.addHandler(file_handler)
@@ -285,6 +285,9 @@ if __name__ == "__main__":
 
 
     LOGS_DIR = args.logs
+    if not os.path.isdir(LOGS_DIR):
+        os.mkdir(LOGS_DIR, stat.S_IRWXU | stat.S_IRGRP | stat.S_IROTH | stat.S_IXGRP | stat.S_IXOTH)
+
     create_logging_handler()
     while True:
         perform_daily_tasks()
