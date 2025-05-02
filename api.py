@@ -15,6 +15,7 @@ from datetime import datetime
 
 
 app = FastAPI()
+LOGS_DIR = os.getenv("LOGS_DIR", "~/uptime_logs")
 
 if int(os.getenv("DEV_ENV", "0")) == 1:
     #demo page which uses the endpoints
@@ -43,7 +44,7 @@ if int(os.getenv("DEV_ENV", "0")) == 1:
 def calculate_uptime_data() -> List[Tuple[float, float]]:
     yesterday = time.localtime(time.time() - 24*60*60)
     yesterday_str = time.strftime('%Y-%m-%d', yesterday)
-    yesterday_log = f"logs/{yesterday_str}-uptime.log"
+    yesterday_log = f"{LOGS_DIR}/logs/{yesterday_str}-uptime.log"
     try:
         with open(yesterday_log, "r") as f:
             log = f.readlines()
@@ -52,7 +53,7 @@ def calculate_uptime_data() -> List[Tuple[float, float]]:
     
     today = time.localtime()
     today_str = time.strftime('%Y-%m-%d', today)
-    today_log = f"logs/{today_str}-uptime.log"
+    today_log = f"{LOGS_DIR}/logs/{today_str}-uptime.log"
     try:
         with open(today_log, "r") as f:
             log += f.readlines()
@@ -135,10 +136,10 @@ def process_log_file(log_path: str) -> List[ConnectionTest]:
 #raw data since provided date, up to 3 days in the past, between now and {period} seconds ago
 @app.get("/raw")
 def raw(period: int = Query(ge=0, le=31*24*60*60)) -> RawUptimeData:
-    all_logs = [f for f in os.listdir("logs/") if re.match("[0-9]{4}-[01][0-9]-[0-3][0-9]-uptime.log", f)]
+    all_logs = [f for f in os.listdir(f"{LOGS_DIR}/logs/") if re.match("[0-9]{4}-[01][0-9]-[0-3][0-9]-uptime.log", f)]
     full_log = []
     for log_path in all_logs:
-        full_log += process_log_file("logs/" + log_path)
+        full_log += process_log_file(f"{LOGS_DIR}/logs/{log_path}")
 
     start_t = time.time()
     for i, entry in enumerate(full_log):
@@ -160,19 +161,19 @@ def uptime(since: str = Query(regex="[0-9]{4}-[01][0-9]-[0-3][0-9]")) -> UptimeR
         raise HTTPException(status_code=424, detail=f"Date ?{since=} is in the future")
 
     historical_uptime = []
-    all_precomputes = [f for f in os.listdir("precomputes/") if re.match("[0-9]{4}-[01][0-9]-[0-3][0-9]-uptime.json", f)]
+    all_precomputes = [f for f in os.listdir(f"{LOGS_DIR}/precomputes/") if re.match("[0-9]{4}-[01][0-9]-[0-3][0-9]-uptime.json", f)]
     for precompute in all_precomputes:
         precompute_date = datetime.strptime(precompute[:10], "%Y-%m-%d")
         if (start_date - precompute_date).days > 0:
             continue
 
-        with open(f"precomputes/{precompute}", "r") as f:
+        with open(f"{LOGS_DIR}/precomputes/{precompute}", "r") as f:
             contents = json.load(f)
             historical_uptime.append(contents["daily-uptime"])
 
     today = time.localtime()
     today_str = time.strftime('%Y-%m-%d', today)
-    today_log = f"logs/{today_str}-uptime.log"
+    today_log = f"{LOGS_DIR}/logs/{today_str}-uptime.log"
     today_uptime = 1.0
     try:
         with open(today_log, "r") as f:
@@ -195,9 +196,9 @@ class DisruptionHistory(BaseModel):
 
 def get_disruptions_past() -> List[DisruptionInstance]:
     disruptions = []
-    all_precomputes = [f for f in os.listdir("precomputes/") if re.match("[0-9]{4}-[01][0-9]-[0-3][0-9]-uptime.json", f)]
+    all_precomputes = [f for f in os.listdir("{LOGS_DIR}/precomputes/") if re.match("[0-9]{4}-[01][0-9]-[0-3][0-9]-uptime.json", f)]
     for precompute in all_precomputes:
-        with open(f"precomputes/{precompute}", "r") as f:
+        with open(f"{LOGS_DIR}/precomputes/{precompute}", "r") as f:
             contents = json.load(f)
             disruptions += contents["disruptions"]
 
@@ -208,7 +209,7 @@ def get_disruptions_past() -> List[DisruptionInstance]:
 def get_disruptions_today() -> List[DisruptionInstance]:
     today = time.localtime()
     today_str = time.strftime('%Y-%m-%d', today)
-    today_log = f"logs/{today_str}-uptime.log"
+    today_log = f"{LOGS_DIR}/logs/{today_str}-uptime.log"
     try:
         with open(today_log, "r") as f:
             log = f.readlines()
