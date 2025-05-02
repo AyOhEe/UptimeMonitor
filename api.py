@@ -16,6 +16,7 @@ from datetime import datetime
 
 app = FastAPI()
 LOGS_DIR = os.getenv("LOGS_DIR", "~/uptime_logs")
+print(f"Looking for logs in \"{LOGS_DIR}\"")
 
 if int(os.getenv("DEV_ENV", "0")) == 1:
     #demo page which uses the endpoints
@@ -58,7 +59,7 @@ def calculate_uptime_data() -> List[Tuple[float, float]]:
         with open(today_log, "r") as f:
             log += f.readlines()
     except FileNotFoundError:
-        pass
+        print(f"Failed to open {today_log}")
 
     return ut.calculate_log_rolling_uptimes(log)
 
@@ -179,7 +180,7 @@ def uptime(since: str = Query(regex="[0-9]{4}-[01][0-9]-[0-3][0-9]")) -> UptimeR
         with open(today_log, "r") as f:
             today_uptime = ut.calculate_uptime(f.readlines())
     except FileNotFoundError:
-        pass
+        print(f"Failed to open {today_log}")
     
     overall_uptime = historical_uptime + [today_uptime]
     average_uptime = sum(overall_uptime) / len(overall_uptime)
@@ -214,6 +215,7 @@ def get_disruptions_today() -> List[DisruptionInstance]:
         with open(today_log, "r") as f:
             log = f.readlines()
     except FileNotFoundError:
+        print(f"Failed to open {today_log}")
         return []
 
     disruptions = ut.calculate_disruptions(log)
