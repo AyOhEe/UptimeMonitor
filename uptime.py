@@ -238,8 +238,13 @@ def remove_pid_file(sig, frame):
     exit(0)
 
 
+LAST_HANDLER = None
 def create_logging_handler():
     global LOGS_DIR
+    global LAST_HANDLER
+
+    if not LAST_HANDLER is None:
+        LOGGER.removeHandler(LAST_HANDLER)
 
     TODAY = time.strftime('%Y-%m-%d')
     if not os.path.isdir(f"{LOGS_DIR}/logs"):
@@ -247,6 +252,7 @@ def create_logging_handler():
 
     file_handler = logging.FileHandler(f"{LOGS_DIR}/logs/{TODAY}-uptime.log")
     file_handler.setFormatter(formatter)
+    LAST_HANDLER = file_handler
 
     LOGGER.addHandler(file_handler)
 
@@ -292,9 +298,9 @@ if __name__ == "__main__":
     create_pid_file()
     signal.signal(signal.SIGINT, remove_pid_file)
     signal.signal(signal.SIGTERM, remove_pid_file)
-    
-    create_logging_handler()
+
     while True:
+        create_logging_handler()
         perform_daily_tasks()
         perform_monthly_tasks()
 
