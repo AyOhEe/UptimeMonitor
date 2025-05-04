@@ -13,8 +13,8 @@ jobs:
     steps:
       - name: Kill uptime.py
         run: |
-          if [ -f $HOME/uptime_logs/.pid ]; then
-              pkill -4 -F $HOME/uptime_logs/.pid
+          if [ -f $HOME/uptime_logs/.pid ]; then 
+              pkill -4 -F $HOME/uptime_logs/.pid || true
               rm $HOME/uptime_logs/.pid
           fi
       - name: Kill api.py
