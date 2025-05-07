@@ -3,12 +3,14 @@ import sys
 import os
 import platform
 import time
+import datetime
 import logging
 import argparse
 import json
 import re
 import signal
 import stat
+import pygal
 
 from typing import List, Dict, Tuple, Never, Any, Generator
 
@@ -150,7 +152,7 @@ def generate_precompute() -> Dict[str, Any]:
 def remove_old_logs() -> None:
     global LOGS_DIR
     
-    all_logs = [f for f in os.listdir(LOGS_DIR) if re.match("[0-9]{4}-[01][0-9]-[0-3][0-9]-uptime.log", f)]
+    all_logs = [f for f in os.listdir(f"{LOGS_DIR}/logs/") if re.match("[0-9]{4}-[01][0-9]-[0-3][0-9]-uptime.log", f)]
     for log_name in all_logs:
         log_path = f"{LOGS_DIR}/logs/{log_name}"
         log_last_modified = os.stat(log_path).st_mtime
@@ -171,10 +173,8 @@ def calculate_last_month() -> int:
 def last_month_precomputes() -> Generator[str, None, None]:
     all_precomputes = [f for f in os.listdir(f"{LOGS_DIR}/precomputes") if re.match("[0-9]{4}-[01][0-9]-[0-3][0-9]-uptime.json", f)]
     last_month = calculate_last_month()
-    print(last_month)
     for precompute in all_precomputes:
         date = time.strptime(precompute[:10], "%Y-%m-%d")
-        print(date)
         if date.tm_mon == last_month:
             yield precompute
 
@@ -191,7 +191,31 @@ def generate_month_disruption_report() -> None:
         json.dump({ "disruptions" : disruptions }, f, indent=4)
 
 def generate_month_disruption_graph() -> None:
-    pass
+    year = time.localtime().tm_year
+    last_month = calculate_last_month()
+    all_precomputes = [f for f in os.listdir(f"{LOGS_DIR}/precomputes") if re.match(f"{year}-{last_month:02}-[0-3][0-9]-uptime.json", f)]
+    
+    uptimes = []
+    dates = []
+    for precompute in all_precomputes:
+        with open(f"{LOGS_DIR}/precomputes/{precompute}", "r") as f:
+            contents = json.load(f)
+            uptimes.append(contents["daily-uptime"])
+        dates.append(datetime.datetime.strptime(precompute[:10], "%Y-%m-%d"))
+
+    
+    graph = pygal.DateLine(
+        x_label_rotation=30,
+        show_dots=False,
+        show_x_guides=True,
+        width=1500,
+        legend_at_bottom=True,
+        legend_at_bottom_columns=3
+    )
+    graph.y_labels = [0, 1]
+
+    graph.add("Daily uptime", [t for t in zip(dates, uptimes)])
+    graph.render_to_file(f"{LOGS_DIR}/precomputes/{year}-{last_month:02}-uptime-graph.svg")
 
 def perform_monthly_tasks():
     if is_first_of_month():
