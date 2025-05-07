@@ -1,66 +1,92 @@
-import subprocess
-import sys
+# Standard library
+import argparse
+import datetime
+import json
+import logging
 import os
 import platform
-import time
-import datetime
-import logging
-import argparse
-import json
 import re
 import signal
 import stat
+import subprocess
+import sys
+import time
+
+# Standard library "from" statements
+from typing import Any, Dict, Generator, List, Never, Tuple
+
+# 3rd party libraries
 import pygal
 
-from typing import List, Dict, Tuple, Never, Any, Generator
 
+# Directory containing logs/ and precomputes/
 LOGS_DIR = "~/uptime_logs"
 
+# Add another level to ensure startup messages are always included in logs
 logging.addLevelName(100, "START")
 LOGGER = logging.getLogger("uptime")
 LOGGER.setLevel(logging.INFO)
 
+# Log time as a unix timestamp. Not supported directly, so we monkeypatch a logging.Formatter instance
 formatter = logging.Formatter("[%(asctime)s]\t[%(levelname)s]:\t %(message)s")
 formatter.formatTime = lambda record, datefmt=None: str(int(time.time()))
 
 
+# Calculates the uptime percentage for a section of log.
+# Until encountering a startup message, assumes 2000ms per log entry.
 def calculate_uptime(log: List[str]) -> float:
+    # We keep track of the *accounted* time so that gaps don't skew the results
     accounted_uptime = 0
     accounted_downtime = 0
 
+    # Default the period to 2000ms so there's something to work off of
     period = 2000
 
-    for i in range(len(log)):
-        line = log[i].strip()
+    # Iterate over every log entry (index isn't important so just iterate over the list)
+    for line in log:
+        # Remove whitespace (spaces, newlines - default str.strip() behaviour) so .endswith behaves
         line = line.strip()
+
         if line.endswith("ms"):
+            # Take the last segment split by spaces, remove the last two chars ("ms"), and cast to int
             period = int(line.split(" ")[-1][:-2])
-            continue
+            continue # We've processed this entry, don't bother checking the rest
 
         elif line.endswith("success"):
+            # Account for another period of connection success
             accounted_uptime += period
-            continue
+            continue # We've processed this entry, don't bother checking the rest
 
         elif line.endswith("FAILED"):
+            # Account for another period of connection failure
             accounted_downtime += period
-            continue
+            continue # We've processed this entry, don't bother checking the rest
 
+    # Calculate and return the ratio between accounted uptime and total accounted time
     return accounted_uptime / (accounted_uptime + accounted_downtime)
 
 
+# Extracts the timestamp from a single log entry
 def get_log_entry_time(line: str) -> int:
+    # Remove whitespace (spaces, newlines - default str.strip() behaviour) so int behaves
     segments = line.split()
+
+    #take and return the first segment, removing the square brackets
     t = int(segments[0][1:-1])
     return t
 
-def get_period_before(log: List[str], i: int, period: int) -> List[str]:
-    j = i
-    while j > 0 and get_log_entry_time(log[i]) - get_log_entry_time(log[j]) < period:
-        j -= 1
+# Extracts the most recent {period} seconds of the provided log 
+def get_period_before(log: List[str], start_from: int, period: int) -> List[str]:
+    # Work backwards from the marked start point
+    end_at = start_from
+    # Keep going backwards until we either run out of log, or the time gap is greater than the requested period
+    while end_at > 0 and get_log_entry_time(log[start_from]) - get_log_entry_time(log[end_at]) < period:
+        end_at -= 1
 
-    return log[j:i + 1]
+    # Return the log from end_at and start_from, inclusive of *both* (hence why we add 1)
+    return log[end_at:start_from + 1]
 
-def calculate_section_uptime(section: List[str], period=2000) -> Tuple[bool, float, float]:
+def calculate_uptime_rolling(section: List[str], period=2000) -> Tuple[bool, float, float]:
     accounted_uptime = 0
     accounted_downtime = 0
 
@@ -99,7 +125,7 @@ def calculate_log_rolling_uptimes(log: List[str], give_24hr_delta: bool = True) 
             continue
 
         last_minute = get_period_before(log, i, 60)
-        valid, minute_uptime, period = calculate_section_uptime(last_minute, period)
+        valid, minute_uptime, period = calculate_uptime_rolling(last_minute, period)
 
         if valid:
             if give_24hr_delta:
