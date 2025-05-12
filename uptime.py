@@ -44,7 +44,8 @@ def calculate_uptime(log: List[str]) -> float:
 
     # Iterate over every log entry (index isn't important so just iterate over the list)
     for line in log:
-        # Remove whitespace (spaces, newlines - default str.strip() behaviour) so .endswith behaves
+        # Split by and remove whitespace (spaces, newlines - default str.strip() behaviour) 
+        # so .endswith behaves
         line = line.strip()
 
         if line.endswith("ms"):
@@ -68,10 +69,10 @@ def calculate_uptime(log: List[str]) -> float:
 
 # Extracts the timestamp from a single log entry
 def get_log_entry_time(line: str) -> int:
-    # Remove whitespace (spaces, newlines - default str.strip() behaviour) so int behaves
+    # Split by and remove whitespace (spaces, newlines - default str.strip() behaviour) so int behaves
     segments = line.split()
 
-    #take and return the first segment, removing the square brackets
+    # Take and return the first segment, removing the square brackets
     t = int(segments[0][1:-1])
     return t
 
@@ -189,7 +190,7 @@ def perform_daily_tasks() -> None:
     generate_precompute()
     remove_old_logs()
 
-
+# Returns true if today is the first of the month
 def is_first_of_month() -> bool:
     return time.localtime(time.time()).tm_mday == 1
 
@@ -243,43 +244,54 @@ def generate_month_disruption_graph() -> None:
     graph.add("Daily uptime", [t for t in zip(dates, uptimes)])
     graph.render_to_file(f"{LOGS_DIR}/precomputes/{year}-{last_month:02}-uptime-graph.svg")
 
+# Performs the tasks due monthly, but only on the first of the month
 def perform_monthly_tasks():
     if is_first_of_month():
         generate_month_disruption_report()
         generate_month_disruption_graph()
 
 
-
+# Returns True if the target IP address could be pinged once
 def is_accessible(target: str) -> bool:
+    # Ping takes -n to count the number of attempts on windows, and -c on linux-like/darwin
     command = ["ping", "-n", "1"] if platform.platform().startswith("Windows") else ["ping", "-c", "1"]
+    # Feed stdout to the void so it doesn't clog stdout. Errors should still go to stdout
     return subprocess.call(command + [target], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT) == 0
 
-def start_monitor(target: str, delay: float) -> Never:
+# Logs if the target IP address is accessible every delay milliseconds. Returns on the start of a new day.
+def start_monitor(target: str, delay: float) -> None:
+    # Keep track of the day we started on so we can switch log files when it changes
     start_day = time.localtime().tm_yday
 
+    # Log the startup message (important as it has the target and delay period) on high priority
     LOGGER.log(100, f"Beginning to monitor {target} every {delay}ms")
     while True:
+        # Return and start again after moving to a new log file if the day has changed 
         if time.localtime().tm_yday != start_day:
             return
 
+        # Log the result of pinging the target
         start_time = time.time_ns()
         if is_accessible(target):
             LOGGER.info(f"success")
         else:
             LOGGER.warning(f"FAILED")
 
-        delta_time = time.time_ns() - start_time
-        sleep_time = (delay / 1000) - (delta_time / 1_000_000_000)
-        time.sleep(max(sleep_time, 0))
+        # Wait until delay milliseconds after we started pinging the target
+        delta_time = time.time_ns() - start_time # Nanoseconds
+        sleep_time = (delay / 1000) - (delta_time / 1_000_000_000) # Seconds
+        time.sleep(max(sleep_time, 0)) # Ensure we don't pass time.sleep a negative value
 
 
-def create_pid_file():
+# Creates or replaces the .pid file with our PID
+def create_pid_file() -> None:
     global LOGS_DIR
 
     with open(f"{LOGS_DIR}/.pid", "w") as f:
         f.write(str(os.getpid()))
 
-def remove_pid_file(sig, frame):
+# Removes the .pid file if it exists, and closes the uptime monitor
+def remove_pid_file(sig, frame) -> Never:
     global LOGS_DIR
 
     if os.path.exists(f"{LOGS_DIR}/.pid"):
@@ -288,25 +300,33 @@ def remove_pid_file(sig, frame):
     exit(0)
 
 
+# We keep track of FileHandlers so they can be cycled to new files when the day changes.
 LAST_HANDLER = None
-def create_logging_handler():
+# Creates and registers a new logging.FileHandler with today's date in the logs directory
+def create_logging_handler() -> None:
     global LOGS_DIR
     global LAST_HANDLER
 
+    # Only remove the handler if it exists - this won't be the case on startup
     if not LAST_HANDLER is None:
         LOGGER.removeHandler(LAST_HANDLER)
 
+    # If we don't create the folder with the correct permissions, the GH actions runner environment
+    # defaults to creating it with 000 permissions
     TODAY = time.strftime('%Y-%m-%d')
     if not os.path.isdir(f"{LOGS_DIR}/logs"):
         os.mkdir(f"{LOGS_DIR}/logs", stat.S_IRWXU | stat.S_IRGRP | stat.S_IROTH | stat.S_IXGRP | stat.S_IXOTH)
 
+    # Point the new FileHandler at today's log file and replace the formatter so logs are consistent
     file_handler = logging.FileHandler(f"{LOGS_DIR}/logs/{TODAY}-uptime.log")
     file_handler.setFormatter(formatter)
+
+    # Make sure we keep track of the handler after it gets assigned
+    LOGGER.addHandler(file_handler)
     LAST_HANDLER = file_handler
 
-    LOGGER.addHandler(file_handler)
-
 if __name__ == "__main__":
+    # Standard argparse setup
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--target", 
@@ -334,21 +354,27 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
 
+    # It's preferable to not clog stdout unless we're explicitly asked
     if args.stdout:
         stdout_handler = logging.StreamHandler(sys.stdout)
         stdout_handler.setFormatter(formatter)
         LOGGER.addHandler(stdout_handler)
 
 
-
+    # If we don't create the folder with the correct permissions, the GH actions runner environment
+    # defaults to creating it with 000 permissions
     LOGS_DIR = args.logs
     if not os.path.isdir(LOGS_DIR):
         os.mkdir(LOGS_DIR, stat.S_IRWXU | stat.S_IRGRP | stat.S_IROTH | stat.S_IXGRP | stat.S_IXOTH)
 
+    # Keep a .pid file on hand so GH actions workflows updates can kill the active uptime monitor
     create_pid_file()
+    # Remove the .pid file when we're (politely) asked to close. Will not remove if asked less nicely.
     signal.signal(signal.SIGINT, remove_pid_file)
     signal.signal(signal.SIGTERM, remove_pid_file)
 
+    # This is in a loop as it restarts daily at midnight to change over log files, 
+    # as well as to perform periodic tasks
     while True:
         create_logging_handler()
         perform_daily_tasks()
