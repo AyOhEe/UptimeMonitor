@@ -1,17 +1,21 @@
-import pygal
-import time
-import os
-import re
+# Standard library
 import json
+import os
+import pygal
+import re
+import time
 import uptime as ut
 
+# Standard library "from" statements
+from datetime import datetime
 from enum import Enum
 from typing import List, Tuple
+
+# 3rd party library "from" statements
 from fastapi import FastAPI, Query, Response
-from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.exceptions import HTTPException
+from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel, Field
-from datetime import datetime
 
 
 app = FastAPI()
