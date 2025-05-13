@@ -18,10 +18,15 @@ from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel, Field
 
 
-app = FastAPI()
+# Directory containing logs/ and precomputes/
 LOGS_DIR = os.getenv("LOGS_DIR", "~/uptime_logs")
 
+# The FastAPI app used to serve this API
+app = FastAPI()
 
+
+# Calculates rolling uptimes over the past two days of log data
+# We use two days so we always have at least 24 hours of data for the graph
 def calculate_uptime_data() -> List[Tuple[float, float]]:
     yesterday = time.localtime(time.time() - 24*60*60)
     yesterday_str = time.strftime('%Y-%m-%d', yesterday)
@@ -41,8 +46,10 @@ def calculate_uptime_data() -> List[Tuple[float, float]]:
     except FileNotFoundError:
         print(f"Failed to open {today_log}")
 
-    return ut.calculate_log_rolling_uptimes(log)
+    return ut.calculate_log_rolling_uptimes(log, True)
 
+# Inserts gaps of None in the provided uptime graph data, 
+# to separate lines in the event of large time gaps 
 def insert_none_at_gaps(data: List[Tuple[float, float]], gap: float) -> List[Tuple[float, float]]:
     i = 1
     while i < len(data):
@@ -56,7 +63,7 @@ def insert_none_at_gaps(data: List[Tuple[float, float]], gap: float) -> List[Tup
 
     return data
 
-#shows past 24hrs of uptime on a graph
+# Shows past 24hrs of uptime on a graph
 @app.get("/uptime_graph.svg", response_class=FileResponse)
 def uptime_graph() -> Response:
     graph = pygal.XY(
@@ -88,17 +95,21 @@ def uptime_graph() -> Response:
     return Response(graph.render(), 200, {"Content-Type" : "image/svg+xml"})
 
 
+# The result of a single attempt to ping a given address
 class ConnectionResult(Enum):
     FAIL = False
     SUCCESS = True
 
+# An attempt to ping a given address at a given time
 class ConnectionTest(BaseModel):
     timestamp: int = Field(ge=0)
     result: ConnectionResult
 
+# Several attempts to ping a given address over a period of time
 class RawUptimeData(BaseModel):
     entries: List[ConnectionTest] = []
 
+# Converts a raw log file into a series of ConnectionTests, with time and result
 def process_log_file(log_path: str) -> List[ConnectionTest]:
     tests = []
     with open(log_path, "r") as f:
@@ -114,9 +125,9 @@ def process_log_file(log_path: str) -> List[ConnectionTest]:
 
     return tests
 
-#raw data since provided date, up to 3 days in the past, between now and {period} seconds ago
+# Raw data since provided date, up to 30 days in the past, between now and {period} seconds ago
 @app.get("/raw")
-def raw(period: int = Query(ge=0, le=31*24*60*60)) -> RawUptimeData:
+def raw(period: int = Query(ge=0, le=30*24*60*60)) -> RawUptimeData:
     all_logs = [f for f in os.listdir(f"{LOGS_DIR}/logs/") if re.match("[0-9]{4}-[01][0-9]-[0-3][0-9]-uptime.log", f)]
     full_log = []
     for log_path in all_logs:
@@ -130,11 +141,11 @@ def raw(period: int = Query(ge=0, le=31*24*60*60)) -> RawUptimeData:
     return RawUptimeData(entries=[])
 
 
-
+# A record of overall uptime for a given time period, [0,100]
 class UptimeReport(BaseModel):
-    uptime: float = Field(1.0, ge=0, le=1)
+    uptime: float = Field(100, ge=0, le=100)
 
-#returns average uptime since the provided date
+# Returns the average uptime since the provided date
 @app.get("/uptime")
 def uptime(since: str = Query(regex="[0-9]{4}-[01][0-9]-[0-3][0-9]")) -> UptimeReport:
     start_date = datetime.strptime(since, "%Y-%m-%d")
@@ -155,10 +166,10 @@ def uptime(since: str = Query(regex="[0-9]{4}-[01][0-9]-[0-3][0-9]")) -> UptimeR
     today = time.localtime()
     today_str = time.strftime('%Y-%m-%d', today)
     today_log = f"{LOGS_DIR}/logs/{today_str}-uptime.log"
-    today_uptime = 1.0
+    today_uptime = 100
     try:
         with open(today_log, "r") as f:
-            today_uptime = ut.calculate_uptime(f.readlines())
+            today_uptime = ut.calculate_uptime_rolling(f.readlines())[1] / 100
     except FileNotFoundError:
         print(f"Failed to open {today_log}")
     
@@ -168,13 +179,16 @@ def uptime(since: str = Query(regex="[0-9]{4}-[01][0-9]-[0-3][0-9]")) -> UptimeR
     return UptimeReport(uptime=average_uptime)
 
 
+# A single instance of disrupted connection, lasting (end - start) seconds
 class DisruptionInstance(BaseModel):
     start: int = Field(ge=0)
     end: int = Field(ge=0)
 
+# A full history of disruptions over a given time period
 class DisruptionHistory(BaseModel):
     disruptions: List[DisruptionInstance] = []
 
+# Returns disruptions detected in precomputes from past days.
 def get_disruptions_past() -> List[DisruptionInstance]:
     disruptions = []
     all_precomputes = [f for f in os.listdir("{LOGS_DIR}/precomputes/") if re.match("[0-9]{4}-[01][0-9]-[0-3][0-9]-uptime.json", f)]
@@ -183,10 +197,13 @@ def get_disruptions_past() -> List[DisruptionInstance]:
             contents = json.load(f)
             disruptions += contents["disruptions"]
 
+    # TODO load consolidated disruption reports
+
 
     disruptions = [DisruptionInstance(start=d["start"], end=d["end"]) for d in disruptions]
     return disruptions
 
+# Returns disruptions detected in today's log file
 def get_disruptions_today() -> List[DisruptionInstance]:
     today = time.localtime()
     today_str = time.strftime('%Y-%m-%d', today)
@@ -203,16 +220,16 @@ def get_disruptions_today() -> List[DisruptionInstance]:
 
     return disruptions
 
-#returns a list of all disruptions between now and {period} seconds ago
+# Returns a list of all disruptions between now and {period} seconds ago
 @app.get("/disruptions")
 def disruptions(period: int = Query(ge=0)) -> DisruptionHistory:
+    # Combine historic disruptions with today's disruptions
     historic = get_disruptions_past()
     today = get_disruptions_today()
-
     disruptions = historic + today
+
+    # Filter disruptions to only be within the given timespan
     disruptions = [d for d in disruptions if time.time() - d.end < period]
 
-    for disruption in disruptions:
-        print (time.time() - disruption.end)
-
+    # Return a serializable object with the disruptions
     return DisruptionHistory(disruptions=disruptions)
