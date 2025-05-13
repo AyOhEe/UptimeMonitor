@@ -217,20 +217,25 @@ def generate_month_disruption_report() -> None:
     with open(f"{LOGS_DIR}/precomputes/{year}-{last_month:02}-disruption.json", "w") as f:
         json.dump({ "disruptions" : disruptions }, f, indent=4)
 
+# Creates a graph showing the daily uptime percentage for the past month of available data
 def generate_month_disruption_graph() -> None:
+    # Filter the precomputed data json files so we've only got last month's data
     year = time.localtime().tm_year
     last_month = calculate_last_month()
     all_precomputes = [f for f in os.listdir(f"{LOGS_DIR}/precomputes") if re.match(f"{year}-{last_month:02}-[0-3][0-9]-uptime.json", f)]
     
+    # Consolidate the data (parsing dates when necessary)
     uptimes = []
     dates = []
     for precompute in all_precomputes:
         with open(f"{LOGS_DIR}/precomputes/{precompute}", "r") as f:
             contents = json.load(f)
-            uptimes.append(contents["daily-uptime"])
+            # Multiply by 100 to convert from fraction to percent
+            uptimes.append(contents["daily-uptime"] * 100) 
         dates.append(datetime.datetime.strptime(precompute[:10], "%Y-%m-%d"))
 
-    
+
+    # Create and render the graph using pygal, as it's already used by the API server and lets me save to svg
     graph = pygal.DateLine(
         x_label_rotation=30,
         show_dots=False,
@@ -239,8 +244,11 @@ def generate_month_disruption_graph() -> None:
         legend_at_bottom=True,
         legend_at_bottom_columns=3
     )
-    graph.y_labels = [0, 1]
+    # Percentage runs from 0% to 100%
+    graph.y_labels = [0, 100]
 
+    # Add the data and render. Zip the dates and uptimes to get (X, Y) coordinate pairs for the graph
+    # We can't provide the generator directly as DateLine.add expects a collection, not an iterable
     graph.add("Daily uptime", [t for t in zip(dates, uptimes)])
     graph.render_to_file(f"{LOGS_DIR}/precomputes/{year}-{last_month:02}-uptime-graph.svg")
 
