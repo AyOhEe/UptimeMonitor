@@ -33,46 +33,15 @@ formatter.formatTime = lambda record, datefmt=None: str(int(time.time()))
 
 
 # Creates the directory at path if it does not already exist
-def create_directory_if_missing(path):
+def create_directory_if_missing(path: str) -> None:
     # If we don't create the folder with the correct permissions, the GH actions runner environment
     # defaults to creating it with 000 permissions
     if not os.path.isdir(path):
         os.mkdir(path, stat.S_IRWXU | stat.S_IRGRP | stat.S_IROTH | stat.S_IXGRP | stat.S_IXOTH)
 
-# Calculates the uptime percentage for a section of log.
-# Until encountering a startup message, assumes 2000ms per log entry.
-def calculate_uptime(log: List[str]) -> float:
-    # We keep track of the *accounted* time so that gaps don't skew the results
-    accounted_uptime = 0
-    accounted_downtime = 0
-
-    # Default the period to 2000ms so there's something to work off of
-    period = 2000
-
-    # Iterate over every log entry (index isn't important so just iterate over the list)
-    for line in log:
-        # Split by and remove whitespace (spaces, newlines - default str.strip() behaviour) 
-        # so .endswith behaves
-        line = line.strip()
-
-        if line.endswith("ms"):
-            # Take the last segment split by spaces, remove the last two chars ("ms"), and cast to int
-            period = int(line.split(" ")[-1][:-2])
-            continue # We've processed this entry, don't bother checking the rest
-
-        elif line.endswith("success"):
-            # Account for another period of connection success
-            accounted_uptime += period
-            continue # We've processed this entry, don't bother checking the rest
-
-        elif line.endswith("FAILED"):
-            # Account for another period of connection failure
-            accounted_downtime += period
-            continue # We've processed this entry, don't bother checking the rest
-
-    # Calculate and return the ratio between accounted uptime and total accounted time
-    return accounted_uptime / (accounted_uptime + accounted_downtime)
-
+# Returns all files in path with filenames matching the provided regular expression
+def files_matching_in(regex: str, path: str) -> List[str]:
+    return [f for f in os.listdir(path) if re.match(regex, f)]
 
 # Extracts the timestamp from a single log entry
 def get_log_entry_time(line: str) -> int:
@@ -94,31 +63,35 @@ def get_period_before(log: List[str], start_from: int, period: int) -> List[str]
     # Return the log from end_at and start_from, inclusive of *both* (hence why we add 1)
     return log[end_at:start_from + 1]
 
+# Calculates the rolling uptime for a section of logs, and returns the updated period between entries
 def calculate_uptime_rolling(section: List[str], period=2000) -> Tuple[bool, float, float]:
+    # We're really returning the ratio between recorded uptime and downtime. We don't know what
+    # happens in gaps, so we don't assume.
     accounted_uptime = 0
     accounted_downtime = 0
 
-    if section[0].strip().endswith("ms"):
-        period = int(section[0].strip().split()[-1][:-2])
-
-    current_period = period
     for i in range(len(section)):
+        # Removing whitespace (like \n) makes .endswith behave
         line = section[i].strip()
+        # When we run into a starting message, update our period for accurate weighting
         if line.endswith("ms"):
-            current_period = int(line.split(" ")[-1][:-2])
+            period = int(line.split(" ")[-1][:-2])
             continue
 
+        # Otherwise just record success and failure entries
         elif line.endswith("success"):
-            accounted_uptime += current_period
+            accounted_uptime += period
             continue
 
         elif line.endswith("FAILED"):
-            accounted_downtime += current_period
+            accounted_downtime += period
             continue
 
+    # If we didn't successfully record any data, inform the caller that this is a bad entry
     if (accounted_uptime + accounted_downtime) == 0:
         return False, None, None
 
+    # Return the uptime percentage [0,100] and the new period
     section_uptime = 100 * accounted_uptime / (accounted_uptime + accounted_downtime)
     return True, section_uptime, period
 
@@ -180,6 +153,7 @@ def generate_precompute() -> Dict[str, Any]:
     yesterday_str = time.strftime('%Y-%m-%d', yesterday)
     yesterday_log = f"{LOGS_DIR}/{yesterday_str}-uptime.log"
 
+    # Ensure the precomputes directory actually exists
     create_directory_if_missing(f"{LOGS_DIR}/precomputes")
 
     # Ensure we don't work on a log that doesn't exist (this will be the case for fresh installs)
@@ -191,7 +165,7 @@ def generate_precompute() -> Dict[str, Any]:
     with open(f"{LOGS_DIR}/logs/{yesterday_str}-uptime.log", "r") as f:
         log = f.readlines()
         precompute = {
-            "daily-uptime": calculate_uptime(log),
+            "daily-uptime": calculate_uptime_rolling(log)[1] or 0.0, # If the data is bad, default to 0%
             "disruptions": calculate_disruptions(log)
         }
     
@@ -203,8 +177,7 @@ def remove_old_logs() -> None:
     global LOGS_DIR
     
     # Find and iterate over each log
-    all_logs = [f for f in os.listdir(f"{LOGS_DIR}/logs/") if re.match("[0-9]{4}-[01][0-9]-[0-3][0-9]-uptime.log", f)]
-    for log_name in all_logs:
+    for log_name in files_matching_in("[0-9]{4}-[01][0-9]-[0-3][0-9]-uptime.log", f"{LOGS_DIR}/logs/"):
         log_path = f"{LOGS_DIR}/logs/{log_name}"
         log_last_modified = os.stat(log_path).st_mtime
 
@@ -230,9 +203,8 @@ def calculate_last_month() -> int:
 # Yields each precomputed data json file found from last month
 def last_month_precomputes() -> Generator[str, None, None]:
     # Filter the precomputed data json files so we've only got last month's data
-    all_precomputes = [f for f in os.listdir(f"{LOGS_DIR}/precomputes") if re.match("[0-9]{4}-[01][0-9]-[0-3][0-9]-uptime.json", f)]
     last_month = calculate_last_month()
-    for precompute in all_precomputes:
+    for precompute in files_matching_in("[0-9]{4}-[01][0-9]-[0-3][0-9]-uptime.json", f"{LOGS_DIR}/precomputes"):
         # Double check that we're only providing data from last month
         date = time.strptime(precompute[:10], "%Y-%m-%d")
         if date.tm_mon == last_month:
@@ -258,12 +230,11 @@ def generate_month_disruption_graph() -> None:
     # Filter the precomputed data json files so we've only got last month's data
     year = time.localtime().tm_year
     last_month = calculate_last_month()
-    all_precomputes = [f for f in os.listdir(f"{LOGS_DIR}/precomputes") if re.match(f"{year}-{last_month:02}-[0-3][0-9]-uptime.json", f)]
     
     # Consolidate the data (parsing dates when necessary)
     uptimes = []
     dates = []
-    for precompute in all_precomputes:
+    for precompute in files_matching_in(f"{year}-{last_month:02}-[0-3][0-9]-uptime.json", f"{LOGS_DIR}/precomputes"):
         with open(f"{LOGS_DIR}/precomputes/{precompute}", "r") as f:
             contents = json.load(f)
             # Multiply by 100 to convert from fraction to percent
@@ -355,6 +326,7 @@ def create_logging_handler() -> None:
     if not LAST_HANDLER is None:
         LOGGER.removeHandler(LAST_HANDLER)
 
+    # Ensure the logs directory actually exists
     create_directory_if_missing(f"{LOGS_DIR}/logs")
 
     # Point the new FileHandler at today's log file and replace the formatter so logs are consistent
