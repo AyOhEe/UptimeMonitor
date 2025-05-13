@@ -32,6 +32,13 @@ formatter = logging.Formatter("[%(asctime)s]\t[%(levelname)s]:\t %(message)s")
 formatter.formatTime = lambda record, datefmt=None: str(int(time.time()))
 
 
+# Creates the directory at path if it does not already exist
+def create_directory_if_missing(path):
+    # If we don't create the folder with the correct permissions, the GH actions runner environment
+    # defaults to creating it with 000 permissions
+    if not os.path.isdir(path):
+        os.mkdir(path, stat.S_IRWXU | stat.S_IRGRP | stat.S_IROTH | stat.S_IXGRP | stat.S_IXOTH)
+
 # Calculates the uptime percentage for a section of log.
 # Until encountering a startup message, assumes 2000ms per log entry.
 def calculate_uptime(log: List[str]) -> float:
@@ -115,20 +122,28 @@ def calculate_uptime_rolling(section: List[str], period=2000) -> Tuple[bool, flo
     section_uptime = 100 * accounted_uptime / (accounted_uptime + accounted_downtime)
     return True, section_uptime, period
 
+# Calculates 60-second rolling uptimes for the entire log segment provided
 def calculate_log_rolling_uptimes(log: List[str], give_24hr_delta: bool = True) -> List[Tuple[float, float]]:
+    # Iterate through each log entry and assume a starting period of 2000ms (overriden on starting entries)
     uptimes = []
     period = 2000
     for i, line in enumerate(log):
+        # Only consider the last 24 hours of data
         delta_t = get_log_entry_time(line) - time.time()
         delta_hours = delta_t / (60 * 60)
 
         if delta_hours < -24:
             continue
 
+        # Separate the last minute of data before this log and calculate a rolling uptime
+        # We update and keep track of the period each time as it may change, and those
+        # Datapoints have a different weighting on the overall uptime
         last_minute = get_period_before(log, i, 60)
         valid, minute_uptime, period = calculate_uptime_rolling(last_minute, period)
 
+        # If the segment has little-to-no data it may be rejected, so only store it if it's good
         if valid:
+            # In the case of storing data we want timestamps, but when displaying data we want a delta
             if give_24hr_delta:
                 uptimes.append((delta_hours, minute_uptime))
             else:
@@ -136,12 +151,16 @@ def calculate_log_rolling_uptimes(log: List[str], give_24hr_delta: bool = True) 
 
     return uptimes
 
+# Calculates the moments in the log file where uptime was below acceptable thresholds for a sustained period
 def calculate_disruptions(log: List[str]) -> List[Dict[str, int]]:
     disruptions = []
+    uptimes = calculate_log_rolling_uptimes(log, False) # The rolling uptimes to calculate with
+
+    # We keep track of whether or not we're in a disruption period, and store it when we leave one
     start_time = 0
     in_disruption = False
-    uptimes = calculate_log_rolling_uptimes(log, False)
     for uptime in uptimes:
+        # Only enter a disruption when uptime goes below 80%, and only recover when uptime is above 90%
         if not in_disruption and uptime[1] < 80:
             start_time = uptime[0]
             in_disruption = True
@@ -152,20 +171,23 @@ def calculate_disruptions(log: List[str]) -> List[Dict[str, int]]:
 
     return disruptions
 
+# Precomputes uptime metrics from the raw uptime log recorded yesterday
 def generate_precompute() -> Dict[str, Any]:
     global LOGS_DIR
 
+    # Find the name of yesterday's log
     yesterday = time.localtime(time.time() - 24*60*60)
     yesterday_str = time.strftime('%Y-%m-%d', yesterday)
     yesterday_log = f"{LOGS_DIR}/{yesterday_str}-uptime.log"
 
-    if not os.path.isdir(f"{LOGS_DIR}/precomputes"):
-        os.mkdir(f"{LOGS_DIR}/precomputes", stat.S_IRWXU | stat.S_IRGRP | stat.S_IROTH | stat.S_IXGRP | stat.S_IXOTH)
+    create_directory_if_missing(f"{LOGS_DIR}/precomputes")
 
+    # Ensure we don't work on a log that doesn't exist (this will be the case for fresh installs)
     if not os.path.exists(yesterday_log):
         return
     
 
+    # Open yesterday's log, create the data, and store it to a json file
     with open(f"{LOGS_DIR}/logs/{yesterday_str}-uptime.log", "r") as f:
         log = f.readlines()
         precompute = {
@@ -176,42 +198,56 @@ def generate_precompute() -> Dict[str, Any]:
     with open(f"{LOGS_DIR}/precomputes/{yesterday_str}-uptime.json", "w") as f:
         json.dump(precompute, f, indent=4)
 
+# Removes logs older than 31 days from the logs directory, as precomputes store the necessary data
 def remove_old_logs() -> None:
     global LOGS_DIR
     
+    # Find and iterate over each log
     all_logs = [f for f in os.listdir(f"{LOGS_DIR}/logs/") if re.match("[0-9]{4}-[01][0-9]-[0-3][0-9]-uptime.log", f)]
     for log_name in all_logs:
         log_path = f"{LOGS_DIR}/logs/{log_name}"
         log_last_modified = os.stat(log_path).st_mtime
+
+        # Compare the last modification with the current time in seconds, with a two minute buffer
+        # to account for potential restart delays
         if time.time() - log_last_modified > 31*24*60*60 + 120:
             os.remove(log_path)
 
+# Performs the tasks due daily, at the start of the day
 def perform_daily_tasks() -> None:
     generate_precompute()
     remove_old_logs()
+
 
 # Returns true if today is the first of the month
 def is_first_of_month() -> bool:
     return time.localtime(time.time()).tm_mday == 1
 
+# Returns the number [1,12] == [Jan, Dec] representing the month of the year
 def calculate_last_month() -> int:
-    return ((time.localtime().tm_mon - 2) % 12) + 1
+    return time.localtime().tm_mon
 
+# Yields each precomputed data json file found from last month
 def last_month_precomputes() -> Generator[str, None, None]:
+    # Filter the precomputed data json files so we've only got last month's data
     all_precomputes = [f for f in os.listdir(f"{LOGS_DIR}/precomputes") if re.match("[0-9]{4}-[01][0-9]-[0-3][0-9]-uptime.json", f)]
     last_month = calculate_last_month()
     for precompute in all_precomputes:
+        # Double check that we're only providing data from last month
         date = time.strptime(precompute[:10], "%Y-%m-%d")
         if date.tm_mon == last_month:
             yield precompute
 
+# Precomputes a disruption report for the month, consolidating all of last month's data
 def generate_month_disruption_report() -> None:
+    # Iterate through each precompute we find, and store each disruption logged in them
     disruptions = []
     for precompute in last_month_precomputes():
         with open(f"{LOGS_DIR}/precomputes/{precompute}", "r") as f:
             contents = json.load(f)
             disruptions += contents["disruptions"]
 
+    # Store each of them under a disruption report json file for last month
     year = time.localtime().tm_year
     last_month = calculate_last_month()
     with open(f"{LOGS_DIR}/precomputes/{year}-{last_month:02}-disruption.json", "w") as f:
@@ -319,13 +355,10 @@ def create_logging_handler() -> None:
     if not LAST_HANDLER is None:
         LOGGER.removeHandler(LAST_HANDLER)
 
-    # If we don't create the folder with the correct permissions, the GH actions runner environment
-    # defaults to creating it with 000 permissions
-    TODAY = time.strftime('%Y-%m-%d')
-    if not os.path.isdir(f"{LOGS_DIR}/logs"):
-        os.mkdir(f"{LOGS_DIR}/logs", stat.S_IRWXU | stat.S_IRGRP | stat.S_IROTH | stat.S_IXGRP | stat.S_IXOTH)
+    create_directory_if_missing(f"{LOGS_DIR}/logs")
 
     # Point the new FileHandler at today's log file and replace the formatter so logs are consistent
+    TODAY = time.strftime('%Y-%m-%d')
     file_handler = logging.FileHandler(f"{LOGS_DIR}/logs/{TODAY}-uptime.log")
     file_handler.setFormatter(formatter)
 
@@ -368,12 +401,9 @@ if __name__ == "__main__":
         stdout_handler.setFormatter(formatter)
         LOGGER.addHandler(stdout_handler)
 
-
-    # If we don't create the folder with the correct permissions, the GH actions runner environment
-    # defaults to creating it with 000 permissions
+    # Ensure the logs directory actually exists
     LOGS_DIR = args.logs
-    if not os.path.isdir(LOGS_DIR):
-        os.mkdir(LOGS_DIR, stat.S_IRWXU | stat.S_IRGRP | stat.S_IROTH | stat.S_IXGRP | stat.S_IXOTH)
+    create_directory_if_missing(LOGS_DIR)
 
     # Keep a .pid file on hand so GH actions workflows updates can kill the active uptime monitor
     create_pid_file()
