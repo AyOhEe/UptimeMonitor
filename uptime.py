@@ -165,7 +165,8 @@ def generate_precompute() -> Dict[str, Any]:
     with open(f"{LOGS_DIR}/logs/{yesterday_str}-uptime.log", "r") as f:
         log = f.readlines()
         precompute = {
-            "daily-uptime": calculate_uptime_rolling(log)[1] or 0.0, # If the data is bad, default to 0%
+            # If the data is bad, default to 0%. Divide by 100 to store as a decimal [0.0,1.0]
+            "daily-uptime": (calculate_uptime_rolling(log)[1] / 100) or 0.0, 
             "disruptions": calculate_disruptions(log)
         }
     
