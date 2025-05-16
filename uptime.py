@@ -192,7 +192,6 @@ def perform_daily_tasks() -> None:
     generate_precompute()
     remove_old_logs()
 
-
 # Returns true if today is the first of the month
 def is_first_of_month() -> bool:
     return time.localtime(time.time()).tm_mday == 1
@@ -332,6 +331,7 @@ def create_logging_handler() -> None:
 
     # Point the new FileHandler at today's log file and replace the formatter so logs are consistent
     TODAY = time.strftime('%Y-%m-%d')
+
     file_handler = logging.FileHandler(f"{LOGS_DIR}/logs/{TODAY}-uptime.log")
     file_handler.setFormatter(formatter)
 
