@@ -9,7 +9,9 @@ This repository consists of two programs:
 
 View the API docs on a running instance under `{SERVER ADDRESS}/docs#/`.
 
-This was an experiment in long-term code running, CI/CD pipelines, data aggregation, and API serving, intended to give me experience in these areas.
+This was an experiment in long-term code running, CI/CD pipelines, data aggregation, and API serving, intended to give me experience in these areas. 
+
+I noticed repeated drops in internet quality, so I wanted concrete empirical evidence of my internet quality to decide whether the problem was as bad as I thought it was, or not that big of a deal.
 
 ## Getting Started
 
