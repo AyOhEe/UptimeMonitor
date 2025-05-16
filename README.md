@@ -7,7 +7,7 @@ This repository consists of two programs:
 * uptime.py - Regularly pings a configurable target address, on a configurable period.
 * api.py - Provides API endpoints for accessing data from uptime.py using FastAPI. 
 
-View the API docs on a running instance under `{SERVER ADDRESS}/#docs/`.
+View the API docs on a running instance under `{SERVER ADDRESS}/docs#/`.
 
 This was an experiment in long-term code running, CI/CD pipelines, data aggregation, and API serving, intended to give me experience in these areas.
 
